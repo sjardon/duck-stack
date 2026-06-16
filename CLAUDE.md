@@ -33,7 +33,8 @@ Read these files when the task touches the relevant area — do not read them al
 
 | When working on… | Read |
 |------------------|------|
-| Infra, AWS, CI/CD, Terraform, deployment topology, monorepo conventions | `duck-spec/docs/ARCHITECTURE.md` |
+| Monorepo, Turborepo, TypeScript strategy, inter-service topology | `duck-spec/docs/ARCHITECTURE.md` |
+| AWS resources, Terraform, CI/CD, deployment topology | `duck-spec/docs/INFRASTRUCTURE.md` |
 | Backend (`apps/services`), Fastify, API routes, domain errors, logging | `duck-spec/docs/BACKEND.md` |
 | Frontend (`apps/web`, `apps/landing`), React, Vite, component conventions | `duck-spec/docs/FRONTEND.md` |
 | Current functional state of any module, what is implemented vs. planned | `duck-spec/docs/SPEC.md` |
