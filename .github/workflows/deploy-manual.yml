@@ -1,0 +1,58 @@
+name: Deploy (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options:
+          - dev
+          - prod
+        required: true
+        description: "Target environment"
+      sha:
+        type: string
+        required: true
+        description: "Full commit SHA to deploy"
+
+jobs:
+  validate-sha:
+    name: Validate commit SHA
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify SHA exists
+        run: |
+          if ! git fetch --depth=1 origin ${{ inputs.sha }}; then
+            echo "::error::SHA ${{ inputs.sha }} does not exist in the repository"
+            exit 1
+          fi
+
+  deploy-services:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
+
+  deploy-web:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-web.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
+
+  deploy-landing:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-landing.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit

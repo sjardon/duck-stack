@@ -29,10 +29,11 @@ The duck-spec workspace uses these living documents at two layers:
 
 ```
 duck-spec/
-├── ARCHITECTURE.md   # infrastructure, services, deployment decisions
-├── DOMAIN.md         # index of all domain entities, aggregates, and value objects
-├── BACKEND.md        # backend conventions, patterns, and stack
-├── FRONTEND.md       # frontend conventions, components, and design system
+├── docs/
+│   ├── ARCHITECTURE.md   # infrastructure, services, deployment decisions
+│   ├── DOMAIN.md         # index of all domain entities, aggregates, and value objects
+│   ├── BACKEND.md        # backend conventions, patterns, and stack
+│   └── FRONTEND.md       # frontend conventions, components, and design system
 │
 └── modules/
     └── <module>/
@@ -71,7 +72,7 @@ Update it to reflect the new capabilities introduced by this feature:
 
 Read the following docs and update them **only if the feature introduced changes relevant to each**:
 
-#### ARCHITECTURE.md
+#### `duck-spec/docs/ARCHITECTURE.md`
 Update if the feature introduced or modified:
 - New services, infrastructure components, or deployment targets
 - New inter-service communication patterns
@@ -79,7 +80,7 @@ Update if the feature introduced or modified:
 
 Do NOT update for purely in-module logic changes.
 
-#### DOMAIN.md
+#### `duck-spec/docs/DOMAIN.md`
 Update if the feature introduced or modified:
 - New domain entities, aggregates, or value objects
 - New domain events
@@ -87,12 +88,12 @@ Update if the feature introduced or modified:
 
 Do NOT update for implementation details that have no domain-level meaning.
 
-#### BACKEND.md
+#### `duck-spec/docs/BACKEND.md`
 Update if the feature established a new reusable pattern, convention, or stack decision in the backend — for example, a new error-handling approach, a new middleware pattern, or a new library adopted.
 
 Do NOT update for one-off implementation choices that are not meant to be repeated.
 
-#### FRONTEND.md
+#### `duck-spec/docs/FRONTEND.md`
 Update if the feature established a new reusable component, design pattern, or UI convention.
 
 Do NOT update if no frontend files were modified (check the Files section of design.md).

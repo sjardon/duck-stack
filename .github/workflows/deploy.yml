@@ -1,0 +1,48 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+jobs:
+  resolve-env:
+    name: Resolve target environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment-name: ${{ steps.resolve.outputs.environment-name }}
+
+    steps:
+      - name: Resolve environment from branch
+        id: resolve
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/develop" ]; then
+            echo "environment-name=dev" >> $GITHUB_OUTPUT
+          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "environment-name=prod" >> $GITHUB_OUTPUT
+          fi
+
+  deploy-services:
+    needs: [resolve-env]
+    uses: ./.github/workflows/_deploy-services.yml
+    with:
+      environment: ${{ needs.resolve-env.outputs.environment-name }}
+      sha: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-web:
+    needs: [resolve-env]
+    uses: ./.github/workflows/_deploy-web.yml
+    with:
+      environment: ${{ needs.resolve-env.outputs.environment-name }}
+      sha: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-landing:
+    needs: [resolve-env]
+    uses: ./.github/workflows/_deploy-landing.yml
+    with:
+      environment: ${{ needs.resolve-env.outputs.environment-name }}
+      sha: ${{ github.sha }}
+    secrets: inherit

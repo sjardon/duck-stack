@@ -1,0 +1,65 @@
+name: Deploy Landing (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+        description: "GitHub Environment name (dev or prod)"
+      sha:
+        type: string
+        required: true
+        description: "Full commit SHA to deploy"
+    secrets:
+      AWS_OIDC_ROLE_ARN:
+        required: true
+
+jobs:
+  deploy:
+    name: Build and deploy landing to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-landing-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Log environment and SHA
+        run: echo "Deploying landing SHA=${{ inputs.sha }} to environment=${{ inputs.environment }}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-actions-${{ inputs.environment }}-landing-${{ inputs.sha }}
+
+      - name: Build landing bundle
+        run: pnpm --filter landing build
+
+      - name: Sync to S3
+        run: aws s3 sync apps/landing/dist/ s3://${{ vars.LANDING_S3_BUCKET }} --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.LANDING_CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"

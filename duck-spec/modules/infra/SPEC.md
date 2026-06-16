@@ -150,3 +150,65 @@ infra/terraform/
       variables.tf
       outputs.tf
 ```
+
+---
+
+## CI/CD Pipeline — GitHub Actions (INFRA-004)
+
+Deployments for all three applications (`services`, `web`, `landing`) are automated via GitHub Actions workflows stored under `.github/workflows/`. Two environments are supported: `dev` (mapped to the `develop` branch) and `prod` (mapped to the `main` branch).
+
+### Workflow layout
+
+```
+.github/workflows/
+  deploy.yml            # Push-triggered orchestration: resolves environment from branch, calls all three reusable workflows in parallel
+  deploy-manual.yml     # workflow_dispatch: accepts environment + SHA inputs, calls all three reusable workflows in parallel
+  rollback.yml          # workflow_dispatch: accepts environment + previous SHA, verifies ECR image exists, calls all three reusable workflows
+  _deploy-services.yml  # Reusable (workflow_call): build Docker image, push to ECR tagged with SHA, update App Runner, wait for RUNNING
+  _deploy-web.yml       # Reusable (workflow_call): build Vite bundle, sync to S3, invalidate CloudFront
+  _deploy-landing.yml   # Reusable (workflow_call): build Vite bundle, sync to S3, invalidate CloudFront
+```
+
+Files prefixed with `_` expose only a `workflow_call` interface and are never triggered directly by push or dispatch events.
+
+### Automatic deploy (`deploy.yml`)
+
+A push to `develop` or `main` triggers the orchestration workflow. A `resolve-env` job maps the branch to the corresponding GitHub Environment name (`dev` or `prod`). Three deploy jobs then call the per-app reusable workflows in parallel, each receiving `environment` and `sha` (the triggering commit SHA) as inputs. Pushes to any other branch are ignored by the `branches` filter.
+
+### Manual deploy (`deploy-manual.yml`)
+
+A `workflow_dispatch` trigger accepts two inputs — `environment` (choice of `dev` or `prod`) and `sha` (arbitrary commit SHA). A `validate-sha` job runs `git fetch --depth=1 origin <sha>` and fails fast with a clear error if the SHA does not exist before any AWS interaction occurs. The three deploy jobs run in parallel after validation passes.
+
+### Rollback (`rollback.yml`)
+
+Structurally identical to `deploy-manual.yml`. The `validate-sha` job additionally verifies that the ECR image for the given SHA tag exists using `aws ecr describe-images`, failing loudly if the image is absent so that no partial rollback is attempted.
+
+### Reusable workflow: `_deploy-services.yml`
+
+1. Logs `"Deploying services SHA=<sha> to environment=<env>"`.
+2. Checks out the repository at the given SHA.
+3. Authenticates to AWS via OIDC (`aws-actions/configure-aws-credentials@v4`) using the environment's `AWS_OIDC_ROLE_ARN` secret. No static access keys are used anywhere.
+4. Logs in to ECR.
+5. Builds the Docker image from `apps/services` and pushes it to ECR tagged with the commit SHA.
+6. Calls `aws apprunner update-service` to update the App Runner service to the new image tag.
+7. Calls `aws apprunner wait service-running` — the workflow fails if the service does not reach `RUNNING` status within the timeout.
+
+### Reusable workflows: `_deploy-web.yml` and `_deploy-landing.yml`
+
+1. Logs `"Deploying <web|landing> SHA=<sha> to environment=<env>"`.
+2. Checks out the repository at the given SHA.
+3. Sets up Node.js (LTS) and pnpm, then installs dependencies with `--frozen-lockfile`.
+4. Authenticates to AWS via OIDC.
+5. Builds the Vite production bundle (`pnpm --filter <web|landing> build`).
+6. Syncs `apps/<web|landing>/dist/` to the environment's S3 bucket using `aws s3 sync --delete`.
+7. Creates a CloudFront invalidation for `/*` on the environment's distribution. If this step fails the job fails loudly — a stale cache is never silently tolerated.
+
+### Concurrency and serialization
+
+Every reusable workflow job sets a `concurrency` group keyed to `<app>-<environment>` with `cancel-in-progress: false`. When two deploys to the same environment are triggered close together, the second run queues behind the first rather than interleaving with it.
+
+### AWS authentication
+
+All AWS authentication happens via OIDC. Each GitHub Environment stores one secret (`AWS_OIDC_ROLE_ARN`) and several non-sensitive variables (`AWS_REGION`, `ECR_REPOSITORY_URL`, `APP_RUNNER_SERVICE_ARN`, `WEB_S3_BUCKET`, `LANDING_S3_BUCKET`, `WEB_CLOUDFRONT_DISTRIBUTION_ID`, `LANDING_CLOUDFRONT_DISTRIBUTION_ID`). No static AWS access keys are stored anywhere in the repository or GitHub configuration.
+
+Each environment's IAM role must have a trust policy allowing `token.actions.githubusercontent.com` as an OIDC provider with a `sub` condition matching `repo:sjardon/duck-stack:environment:<env-name>`.
