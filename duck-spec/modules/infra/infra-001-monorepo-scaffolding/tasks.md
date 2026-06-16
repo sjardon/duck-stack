@@ -1,0 +1,32 @@
+# INFRA-001 — Monorepo Scaffolding: Tasks
+
+## Task list
+
+| ID | Title | Description | Covers | File |
+|----|-------|-------------|--------|------|
+| T001 | Create root .gitignore | Create `.gitignore` at the repo root listing `node_modules`, `dist`, `.turbo`, and `*.tsbuildinfo`. | R001 | `.gitignore` |
+| T002 | Create pnpm-workspace.yaml | Create `pnpm-workspace.yaml` declaring `packages: ["apps/*", "packages/*"]`. | R001 | `pnpm-workspace.yaml` |
+| T003 | Create root package.json | Create root `package.json` with `"private": true`, `"name": "duck-stack"`, scripts `build`, `dev`, `lint` delegating to `turbo`, and `devDependencies: { turbo }`. | R001, NF002 | `package.json` |
+| T004 | Create turbo.json pipeline | Create `turbo.json` defining the `build` task with `dependsOn: ["^build"]` and `outputs: ["dist/**"]`, the `dev` task with `"persistent": true` and no cache, and the `lint` task. | R001, R008, NF002, EC002 | `turbo.json` |
+| T005 | Create @repo/tsconfig package.json | Create `packages/tsconfig/package.json` with `"name": "@repo/tsconfig"`, `"private": false`, and an `exports` map exposing `"./base.json": "./base.json"`. | R005 | `packages/tsconfig/package.json` |
+| T006 | Create @repo/tsconfig base.json | Create `packages/tsconfig/base.json` with `compilerOptions` including `"strict": true`, `"target": "ESNext"`, `"module": "ESNext"`, `"moduleResolution": "Bundler"`, `"esModuleInterop": true`, `"skipLibCheck": true`, `"declaration": true`, `"declarationMap": true`, and `"sourceMap": true`. | R005, NF003 | `packages/tsconfig/base.json` |
+| T007 | Create @repo/eslint-config package.json | Create `packages/eslint-config/package.json` with `"name": "@repo/eslint-config"`, `"main": "index.cjs"`, and devDependencies `eslint`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser`. | R006 | `packages/eslint-config/package.json` |
+| T008 | Create @repo/eslint-config index.cjs | Create `packages/eslint-config/index.cjs` exporting a CommonJS ESLint config object that sets the `@typescript-eslint/parser` as parser and enables recommended `@typescript-eslint` rules. | R006 | `packages/eslint-config/index.cjs` |
+| T009 | Create @repo/types package.json | Create `packages/types/package.json` with `"name": "@repo/types"`, `"private": false`, `"types": "src/index.ts"`, and no `dependencies` field. | R007, EC003 | `packages/types/package.json` |
+| T010 | Create @repo/types src/index.ts | Create `packages/types/src/index.ts` exporting an initial set of pure TypeScript interfaces (e.g., a placeholder `ApiResponse<T>` interface) with zero import statements that resolve to runtime code. | R007, EC003 | `packages/types/src/index.ts` |
+| T011 | Create apps/web package.json | Create `apps/web/package.json` with `"name": "web"`, `"private": true`, scripts `{ "dev": "vite", "build": "vite build", "lint": "eslint src" }`, dependencies `react`, `react-dom`, and devDependencies `vite`, `@vitejs/plugin-react`, `typescript`, `@repo/tsconfig` (workspace:*), `@repo/eslint-config` (workspace:*), `@repo/types` (workspace:*). | R002, NF001, EC001 | `apps/web/package.json` |
+| T012 | Create apps/web tsconfig.json | Create `apps/web/tsconfig.json` extending `@repo/tsconfig/base.json` with `include: ["src"]` and `compilerOptions.jsx: "react-jsx"`. | R002, NF003 | `apps/web/tsconfig.json` |
+| T013 | Create apps/web .eslintrc.cjs | Create `apps/web/.eslintrc.cjs` that sets `root: true` and extends `require("@repo/eslint-config")`. | R002 | `apps/web/.eslintrc.cjs` |
+| T014 | Create apps/web vite.config.ts | Create `apps/web/vite.config.ts` exporting a Vite config that includes `@vitejs/plugin-react`. | R002 | `apps/web/vite.config.ts` |
+| T015 | Create apps/web src/main.tsx | Create `apps/web/src/main.tsx` that renders `<App />` into the DOM root using `ReactDOM.createRoot`. | R002 | `apps/web/src/main.tsx` |
+| T016 | Create apps/web src/App.tsx | Create `apps/web/src/App.tsx` exporting a minimal `App` functional component returning a placeholder `<h1>` element. | R002 | `apps/web/src/App.tsx` |
+| T017 | Create apps/landing package.json | Create `apps/landing/package.json` mirroring `apps/web/package.json` with `"name": "landing"` and the same scripts, dependencies, and workspace devDependencies. | R003, NF001, EC001 | `apps/landing/package.json` |
+| T018 | Create apps/landing tsconfig.json | Create `apps/landing/tsconfig.json` extending `@repo/tsconfig/base.json` with `include: ["src"]` and `compilerOptions.jsx: "react-jsx"`. | R003, NF003 | `apps/landing/tsconfig.json` |
+| T019 | Create apps/landing .eslintrc.cjs | Create `apps/landing/.eslintrc.cjs` that sets `root: true` and extends `require("@repo/eslint-config")`. | R003 | `apps/landing/.eslintrc.cjs` |
+| T020 | Create apps/landing vite.config.ts | Create `apps/landing/vite.config.ts` exporting a Vite config that includes `@vitejs/plugin-react`. | R003 | `apps/landing/vite.config.ts` |
+| T021 | Create apps/landing src/main.tsx | Create `apps/landing/src/main.tsx` that renders `<App />` into the DOM root using `ReactDOM.createRoot`. | R003 | `apps/landing/src/main.tsx` |
+| T022 | Create apps/landing src/App.tsx | Create `apps/landing/src/App.tsx` exporting a minimal `App` functional component returning a placeholder `<h1>` element. | R003 | `apps/landing/src/App.tsx` |
+| T023 | Create apps/services package.json | Create `apps/services/package.json` with `"name": "services"`, `"private": true`, scripts `{ "dev": "tsx watch src/index.ts", "build": "tsc", "lint": "eslint src" }`, dependencies `fastify`, and devDependencies `typescript`, `tsx`, `@types/node`, `@repo/tsconfig` (workspace:*), `@repo/eslint-config` (workspace:*), `@repo/types` (workspace:*). | R004, NF001, EC001 | `apps/services/package.json` |
+| T024 | Create apps/services tsconfig.json | Create `apps/services/tsconfig.json` extending `@repo/tsconfig/base.json` with overrides `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"outDir": "dist"`, and `include: ["src"]`. | R004, NF003 | `apps/services/tsconfig.json` |
+| T025 | Create apps/services .eslintrc.cjs | Create `apps/services/.eslintrc.cjs` that sets `root: true` and extends `require("@repo/eslint-config")`. | R004 | `apps/services/.eslintrc.cjs` |
+| T026 | Create apps/services src/index.ts | Create `apps/services/src/index.ts` that instantiates a Fastify server, registers a GET `/health` route returning `{ status: "ok" }`, and starts listening on port 3000. | R004, NF001 | `apps/services/src/index.ts` |

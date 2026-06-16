@@ -28,13 +28,13 @@ The orchestrator also provides `module` — the module name matching a directory
 The duck-spec workspace uses these living documents at two layers:
 
 ```
-ds/
+duck-spec/
 ├── ARCHITECTURE.md   # infrastructure, services, deployment decisions
 ├── DOMAIN.md         # index of all domain entities, aggregates, and value objects
 ├── BACKEND.md        # backend conventions, patterns, and stack
 ├── FRONTEND.md       # frontend conventions, components, and design system
 │
-└── duck-spec/modules/
+└── modules/
     └── <module>/
         ├── FEATURES.md   # feature registry — Estado field must be updated
         └── SPEC.md       # living spec of the module's current functional state
