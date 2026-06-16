@@ -101,3 +101,52 @@ The AWS provider `default_tags` block at the root module level applies `project`
 | `ecr_repository_url` | URL of the ECR repository for `services` images |
 | `app_runner_service_url` | Public HTTPS URL of the App Runner service |
 | `vpc_id` | ID of the provisioned VPC |
+
+---
+
+## Static Hosting — S3 + CloudFront (INFRA-003)
+
+The `infra/terraform/` project includes a reusable `modules/static_site` module that provisions private S3-backed CloudFront distributions. The root configuration instantiates this module twice: once for `web` and once for `landing`.
+
+### Module: `modules/static_site`
+
+The module accepts three input variables — `project`, `environment`, and `app_name` — and provisions the following resources per instance:
+
+| Resource | Purpose |
+|----------|---------|
+| `aws_s3_bucket.main` | Private bucket named `<project>-<environment>-<app_name>`. Holds the Vite-built static assets. |
+| `aws_s3_bucket_public_access_block.main` | Blocks all four public-access flags (`block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets`). The bucket is never directly accessible from the internet. |
+| `aws_cloudfront_origin_access_control.main` | OAC with `signing_behavior = "always"` and `signing_protocol = "sigv4"`. Signs every request from CloudFront to S3 with SigV4 credentials. |
+| `aws_cloudfront_distribution.main` | Distribution whose origin points to the bucket's regional domain name via the OAC. `viewer_protocol_policy = "redirect-to-https"`. `default_root_object = "index.html"`. Two `custom_error_response` blocks map HTTP 403 and 404 from S3 to `/index.html` with response status 200, enabling client-side React Router to resolve deep links. |
+| `aws_s3_bucket_policy.main` | Bucket policy granting `s3:GetObject` to the `cloudfront.amazonaws.com` service principal conditioned on `aws:SourceArn` matching the specific distribution ARN. All other principals are denied. |
+
+### Module instances
+
+| Module call | `app_name` | Serves |
+|-------------|-----------|--------|
+| `module.static_site_web` | `web` | `apps/web` SPA |
+| `module.static_site_landing` | `landing` | `apps/landing` SPA |
+
+### SPA routing fallback
+
+When a user requests a deep link (e.g. `/dashboard/settings`) that does not correspond to a real S3 object, S3 returns a 403. CloudFront intercepts this response and replaces it with `/index.html` at HTTP 200, allowing React Router to resolve the route on the client without a server round-trip.
+
+### Root outputs
+
+Two additional outputs are exposed at the root Terraform level:
+
+| Output | Value |
+|--------|-------|
+| `web_cloudfront_url` | CloudFront distribution domain name for the `web` application |
+| `landing_cloudfront_url` | CloudFront distribution domain name for the `landing` application |
+
+### Directory structure addition
+
+```
+infra/terraform/
+  modules/
+    static_site/        # Reusable module: S3 bucket + OAC + CloudFront distribution + bucket policy
+      main.tf
+      variables.tf
+      outputs.tf
+```

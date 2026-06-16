@@ -58,3 +58,17 @@ module "app_runner" {
   port                   = var.app_runner_port
   environment_variables  = var.app_runner_environment_variables
 }
+
+module "static_site_web" {
+  source      = "./modules/static_site"
+  project     = var.project
+  environment = var.environment
+  app_name    = "web"
+}
+
+module "static_site_landing" {
+  source      = "./modules/static_site"
+  project     = var.project
+  environment = var.environment
+  app_name    = "landing"
+}
