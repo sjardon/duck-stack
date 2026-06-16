@@ -1,0 +1,79 @@
+# services — Functional Spec
+
+Living document describing the current functional state of the `apps/services` Fastify backend. Updated after each implemented feature.
+
+---
+
+## Base structure (SERVICES-001)
+
+### App bootstrap
+
+The `services` app is structured around a simplified hexagonal architecture with vertical slicing. The entry point (`server.ts`) calls `createApp()`, reads `HOST` (default `0.0.0.0`) and `PORT` (default `3000`) from environment variables, and starts the Fastify server. On `SIGINT` or `SIGTERM`, the server performs a graceful shutdown via `fastify.close()`, exiting with code `0` on success and `1` on error.
+
+`app.ts` acts as the Fastify instance factory: it instantiates Fastify, registers all shared plugins (error handler, CORS, Helmet), and registers all feature modules (currently `health`). It does not call `listen` — that responsibility belongs to `server.ts`.
+
+### Directory layout
+
+```
+apps/services/
+  src/
+    app.ts                              # Fastify instance factory
+    server.ts                           # Entry point — boot + graceful shutdown
+    shared/
+      errors.ts                         # DomainError base class + typed errors
+      plugins/
+        error-handler.ts                # Fastify error-handler plugin
+        cors.ts                         # CORS plugin
+        helmet.ts                       # Helmet security-headers plugin
+      infrastructure/
+        logger.ts                       # Standalone Pino logger instance
+        supabase.ts                     # Supabase singleton client
+    modules/
+      health/
+        routes.ts                       # Health-check route plugin
+  Dockerfile
+```
+
+### Logging
+
+Fastify's built-in Pino logger uses pretty-print formatting (`pino-pretty`) when `NODE_ENV` is not `production`, and structured JSON otherwise. The log level is controlled by `LOG_LEVEL` (default `info`). Every HTTP request receives a unique UUID via `genReqId`, and that `reqId` appears in every request-scoped log line for end-to-end traceability.
+
+A standalone `pino()` instance is exported from `shared/infrastructure/logger.ts` with the same level and transport configuration, for use outside the Fastify request context (use cases, repositories).
+
+### Domain error model
+
+`shared/errors.ts` defines a `DomainError` base class with `code`, `message`, and `statusCode` fields. Concrete typed errors extend it:
+
+| Class | Code | HTTP Status |
+|-------|------|-------------|
+| `NotFoundError` | `NOT_FOUND` | 404 |
+| `ValidationError` | `VALIDATION_ERROR` | 400 |
+| `UnauthorizedError` | `UNAUTHORIZED` | 401 |
+
+The error-handler plugin (`shared/plugins/error-handler.ts`) uses `fastify.setErrorHandler` to intercept any `DomainError` and reply with `{ code, message }` at the matching HTTP status. All other errors fall through to Fastify's default handler.
+
+### Security plugins
+
+- `shared/plugins/cors.ts` wraps `@fastify/cors`. The allowed origin is read from `CORS_ORIGIN` (default `*` in non-production environments).
+- `shared/plugins/helmet.ts` wraps `@fastify/helmet` with default options, applying security-related HTTP headers to every response.
+
+Both plugins are registered in `app.ts`.
+
+### Supabase client
+
+`shared/infrastructure/supabase.ts` exports a singleton `SupabaseClient` created once at module load time from `SUPABASE_URL` and `SUPABASE_ANON_KEY`. If either variable is absent the module throws at startup. Infrastructure code (repositories) imports this singleton directly.
+
+### Health module
+
+`modules/health/routes.ts` registers `GET /health`, which responds with `{ status: 'ok', timestamp: <ISO string> }` from memory with no I/O. This endpoint serves as the canonical reference implementation of the vertical-slicing module convention and satisfies the App Runner health-check path.
+
+Response time is well under 100 ms because the handler performs no external calls or I/O operations.
+
+### Container image
+
+`apps/services/Dockerfile` uses a two-stage build:
+
+1. **builder** stage — `node:20-alpine`, installs all workspace dependencies, compiles TypeScript with `tsc`.
+2. **runner** stage — `node:20-alpine`, copies only `dist/` and `node_modules/`, sets `NODE_ENV=production`, exposes port `3000`, runs `node dist/server.js`.
+
+The image is structured for deployment on AWS App Runner: binds to `0.0.0.0:3000` and exposes `/health` as the health-check path.

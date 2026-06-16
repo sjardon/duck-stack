@@ -30,7 +30,7 @@ The repository is a pnpm workspace monorepo orchestrated by Turborepo.
 |---------|-----------|------|
 | `apps/web` | Vite + React + TypeScript | Main SPA served to authenticated users |
 | `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
-| `apps/services` | Fastify + TypeScript | Backend API; exposes `/health` |
+| `apps/services` | Fastify + TypeScript | Backend API. Structured with simplified hexagonal architecture + vertical slicing. Exposes `GET /health` (App Runner health-check path). Containerised via a multi-stage Dockerfile; image deployed to AWS ECR and served by App Runner. |
 
 ## Shared packages
 
