@@ -147,7 +147,7 @@ Provisionar con Terraform dos distribuciones CloudFront respaldadas por buckets 
 
 ## INFRA-004 — CI/CD Pipeline (GitHub Actions)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

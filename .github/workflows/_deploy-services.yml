@@ -1,0 +1,59 @@
+name: Deploy Services (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+        description: "GitHub Environment name (dev or prod)"
+      sha:
+        type: string
+        required: true
+        description: "Full commit SHA to deploy"
+    secrets:
+      AWS_OIDC_ROLE_ARN:
+        required: true
+
+jobs:
+  deploy:
+    name: Build and deploy services to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-services-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Log environment and SHA
+        run: echo "Deploying services SHA=${{ inputs.sha }} to environment=${{ inputs.environment }}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-actions-${{ inputs.environment }}-services-${{ inputs.sha }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: docker build -t ${{ vars.ECR_REPOSITORY_URL }}:${{ inputs.sha }} apps/services
+
+      - name: Push Docker image
+        run: docker push ${{ vars.ECR_REPOSITORY_URL }}:${{ inputs.sha }}
+
+      - name: Update App Runner service
+        run: |
+          aws apprunner update-service \
+            --service-arn ${{ vars.APP_RUNNER_SERVICE_ARN }} \
+            --source-configuration "ImageRepository={ImageIdentifier=${{ vars.ECR_REPOSITORY_URL }}:${{ inputs.sha }},ImageRepositoryType=ECR}"
+
+      - name: Wait for App Runner to reach RUNNING status
+        run: aws apprunner wait service-running --service-arn ${{ vars.APP_RUNNER_SERVICE_ARN }}

@@ -72,7 +72,6 @@ All AWS resources carry at minimum two tags applied automatically via the AWS pr
 
 - **Database**: Supabase is used as an external PostgreSQL provider. No RDS or other database resources are provisioned in AWS.
 - **Custom domains / SSL**: deferred to a future feature.
-- **CI/CD pipeline**: deferred to INFRA-004.
 
 ---
 
@@ -119,6 +118,74 @@ This topology is identical for both `web` and `landing`; each has its own bucket
 
 ### Not managed in this layer
 
-- **Asset upload**: uploading built Vite output to the S3 buckets is handled by CI/CD (INFRA-004).
-- **Cache invalidation**: CloudFront cache invalidation after deploy is handled by CI/CD (INFRA-004).
 - **Custom domains / SSL**: deferred to a future feature.
+
+---
+
+## CI/CD Pipeline — GitHub Actions (INFRA-004)
+
+All deployments are automated through GitHub Actions. The pipeline targets two GitHub Environments — `dev` and `prod` — that correspond to the `develop` and `main` branches respectively.
+
+### Deployment topology
+
+```
+GitHub repository
+  │
+  ├─ push to develop ──► deploy.yml ──► resolve env=dev
+  ├─ push to main    ──► deploy.yml ──► resolve env=prod
+  ├─ workflow_dispatch ► deploy-manual.yml (env + SHA inputs)
+  └─ workflow_dispatch ► rollback.yml     (env + previous SHA inputs)
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+    _deploy-services    _deploy-web     _deploy-landing
+    (parallel)          (parallel)      (parallel)
+              │               │               │
+              ▼               ▼               ▼
+         AWS ECR          AWS S3          AWS S3
+         (push image)     (sync web)      (sync landing)
+              │               │               │
+              ▼               ▼               ▼
+       App Runner        CloudFront      CloudFront
+       (update service)  (invalidate)    (invalidate)
+```
+
+### GitHub Environments
+
+| Environment | Mapped branch | GitHub Environment name |
+|-------------|--------------|------------------------|
+| Development | `develop` | `dev` |
+| Production | `main` | `prod` |
+
+Each environment stores one secret and several non-sensitive variables:
+
+| Name | Kind | Description |
+|------|------|-------------|
+| `AWS_OIDC_ROLE_ARN` | Secret | ARN of the IAM role assumed via OIDC for this environment |
+| `AWS_REGION` | Variable | AWS region (e.g. `us-east-1`) |
+| `ECR_REPOSITORY_URL` | Variable | ECR repository URL for `services` images |
+| `APP_RUNNER_SERVICE_ARN` | Variable | App Runner service ARN for `services` |
+| `WEB_S3_BUCKET` | Variable | S3 bucket name for `web` assets |
+| `LANDING_S3_BUCKET` | Variable | S3 bucket name for `landing` assets |
+| `WEB_CLOUDFRONT_DISTRIBUTION_ID` | Variable | CloudFront distribution ID for `web` |
+| `LANDING_CLOUDFRONT_DISTRIBUTION_ID` | Variable | CloudFront distribution ID for `landing` |
+
+### AWS authentication
+
+All AWS interactions use OIDC via `aws-actions/configure-aws-credentials@v4`. Each environment's IAM role trust policy allows `token.actions.githubusercontent.com` as the OIDC provider with a `sub` condition scoped to `repo:sjardon/duck-stack:environment:<env-name>`. No static AWS access keys are stored in the repository or GitHub configuration.
+
+### Per-app deploy behaviour
+
+| App | Build step | AWS target | Post-deploy action |
+|-----|-----------|-----------|-------------------|
+| `services` | `docker build apps/services` | Push image to ECR tagged with commit SHA; `aws apprunner update-service`; `aws apprunner wait service-running` | Workflow fails if App Runner does not reach `RUNNING` status |
+| `web` | `pnpm --filter web build` | `aws s3 sync apps/web/dist/ s3://WEB_S3_BUCKET --delete` | `aws cloudfront create-invalidation --paths "/*"` — failure stops the job |
+| `landing` | `pnpm --filter landing build` | `aws s3 sync apps/landing/dist/ s3://LANDING_S3_BUCKET --delete` | `aws cloudfront create-invalidation --paths "/*"` — failure stops the job |
+
+### Concurrency serialization
+
+Every reusable deploy job uses a `concurrency` group keyed to `<app>-<environment>` with `cancel-in-progress: false`. Concurrent deploys to the same environment are serialized (the second run queues rather than interleaves).
+
+### Image tagging
+
+Docker images pushed to ECR are tagged with the full commit SHA. The App Runner service is updated to reference the image at that exact tag. This enables rollbacks to any previously deployed commit by re-running the rollback workflow with that SHA (provided the image is still present in ECR).

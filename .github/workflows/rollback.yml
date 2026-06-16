@@ -1,0 +1,76 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options:
+          - dev
+          - prod
+        required: true
+        description: "Target environment to roll back"
+      sha:
+        type: string
+        required: true
+        description: "Previous commit SHA to re-deploy"
+
+jobs:
+  validate-sha:
+    name: Validate commit SHA and ECR image
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify SHA exists
+        run: |
+          if ! git fetch --depth=1 origin ${{ inputs.sha }}; then
+            echo "::error::SHA ${{ inputs.sha }} does not exist in the repository"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-actions-${{ inputs.environment }}-rollback-validate-${{ inputs.sha }}
+
+      - name: Verify ECR image exists for SHA
+        run: |
+          ECR_REPO_NAME=$(echo "${{ vars.ECR_REPOSITORY_URL }}" | cut -d'/' -f2-)
+          if ! aws ecr describe-images \
+               --repository-name "$ECR_REPO_NAME" \
+               --image-ids imageTag=${{ inputs.sha }}; then
+            echo "::error::ECR image for SHA ${{ inputs.sha }} not found in environment ${{ inputs.environment }}. Rollback aborted."
+            exit 1
+          fi
+
+  deploy-services:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
+
+  deploy-web:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-web.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
+
+  deploy-landing:
+    needs: [validate-sha]
+    uses: ./.github/workflows/_deploy-landing.yml
+    with:
+      environment: ${{ inputs.environment }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
