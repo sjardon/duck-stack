@@ -14,6 +14,16 @@ See `duck-spec/modules/infra/SPEC.md` for full details.
 
 ---
 
+## web
+
+**Status:** Base structure in place.
+
+`apps/web` is a Vite + React + TypeScript SPA organised into strict layer directories (`api/`, `hooks/`, `pages/`, `components/ui/`, `components/domain/`, `store/`, `lib/`). The entry point wires React Query via `QueryClientProvider` and two Zustand stores (`useSessionStore`, `useUiStore`) are available for session and UI state. A shared HTTP client (`api/client.ts`) wraps `fetch` with an optional auth-header placeholder. A working health-check vertical slice (`api/health.ts` → `hooks/useHealth.ts` → `pages/health/HealthPage.tsx`) serves as the canonical layering reference.
+
+See `duck-spec/modules/web/SPEC.md` for full details.
+
+---
+
 ## services
 
 **Status:** Fastify base structure in place.

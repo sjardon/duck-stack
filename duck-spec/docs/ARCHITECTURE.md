@@ -24,9 +24,13 @@ pnpm workspace monorepo orchestrated by Turborepo.
 
 | Service | Technology | Role |
 |---------|-----------|------|
-| `apps/web` | Vite + React + TypeScript | Main SPA for authenticated users |
+| `apps/web` | Vite + React + TypeScript, React Query, Zustand | Main SPA for authenticated users |
 | `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
 | `apps/services` | Fastify + TypeScript | Backend API. Containerised; deployed to AWS App Runner via ECR. |
+
+## Inter-service communication
+
+`apps/web` calls `apps/services` over HTTP using the `VITE_API_URL` environment variable as the base URL. All calls are routed through `api/client.ts` (`apiFetch`). In development `VITE_API_URL` defaults to `http://localhost:3000`; in production it points to the App Runner service URL.
 
 ## Shared packages
 

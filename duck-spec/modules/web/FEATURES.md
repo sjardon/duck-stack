@@ -6,7 +6,7 @@ Módulo de la aplicación web (SaaS frontend). Cubre la estructura, arquitectura
 
 ## WEB-001 — Web App Base Structure
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
