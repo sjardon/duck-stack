@@ -71,6 +71,54 @@ All AWS resources carry at minimum two tags applied automatically via the AWS pr
 ### Not managed in AWS
 
 - **Database**: Supabase is used as an external PostgreSQL provider. No RDS or other database resources are provisioned in AWS.
-- **Frontend hosting**: `apps/web` and `apps/landing` hosting (S3 + CloudFront) is deferred to INFRA-003.
 - **Custom domains / SSL**: deferred to a future feature.
 - **CI/CD pipeline**: deferred to INFRA-004.
+
+---
+
+## Static Hosting — S3 + CloudFront (INFRA-003)
+
+Static assets for the `web` and `landing` SPAs are served through private S3 buckets fronted by CloudFront distributions. Both distributions are provisioned by the reusable `modules/static_site` Terraform module, instantiated twice from the root `main.tf`.
+
+### Topology
+
+```
+User (HTTPS)
+  │
+  ▼
+AWS CloudFront distribution  (viewer_protocol_policy: redirect-to-https)
+  │  OAC signs request with SigV4
+  ▼
+AWS S3 bucket  (private — public access blocked on all four flags)
+  │
+  ├─ object found  ──────────────────────► serve asset
+  └─ 403 / 404  → custom_error_response → /index.html, HTTP 200
+                                           └─► React Router resolves client-side route
+```
+
+This topology is identical for both `web` and `landing`; each has its own bucket and distribution.
+
+### Components
+
+| Component | AWS Resource | Notes |
+|-----------|-------------|-------|
+| `web` bucket | `aws_s3_bucket` (`<project>-<env>-web`) | Private. All four public-access-block flags enabled. |
+| `landing` bucket | `aws_s3_bucket` (`<project>-<env>-landing`) | Private. All four public-access-block flags enabled. |
+| `web` OAC | `aws_cloudfront_origin_access_control` | `signing_behavior = "always"`, `signing_protocol = "sigv4"`. |
+| `landing` OAC | `aws_cloudfront_origin_access_control` | `signing_behavior = "always"`, `signing_protocol = "sigv4"`. |
+| `web` distribution | `aws_cloudfront_distribution` | Origin: `web` bucket regional domain. HTTPS-only. 403/404 → `/index.html` / 200. |
+| `landing` distribution | `aws_cloudfront_distribution` | Origin: `landing` bucket regional domain. HTTPS-only. 403/404 → `/index.html` / 200. |
+| Bucket policies | `aws_s3_bucket_policy` (×2) | Grant `s3:GetObject` exclusively to the `cloudfront.amazonaws.com` service principal conditioned on the specific distribution ARN. |
+
+### Key Terraform outputs
+
+| Output | Description |
+|--------|-------------|
+| `web_cloudfront_url` | CloudFront distribution domain name for `apps/web` |
+| `landing_cloudfront_url` | CloudFront distribution domain name for `apps/landing` |
+
+### Not managed in this layer
+
+- **Asset upload**: uploading built Vite output to the S3 buckets is handled by CI/CD (INFRA-004).
+- **Cache invalidation**: CloudFront cache invalidation after deploy is handled by CI/CD (INFRA-004).
+- **Custom domains / SSL**: deferred to a future feature.

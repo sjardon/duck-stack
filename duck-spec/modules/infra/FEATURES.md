@@ -101,7 +101,7 @@ Configurar la infraestructura base en AWS con Terraform: VPC, ECR y App Runner p
 
 ## INFRA-003 — Static Hosting (S3 + CloudFront)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
