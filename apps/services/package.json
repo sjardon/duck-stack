@@ -8,14 +8,20 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "fastify": "^4.0.0"
+    "@fastify/cors": "^9.0.0",
+    "@fastify/helmet": "^11.0.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "fastify": "^4.0.0",
+    "fastify-plugin": "^4.0.0",
+    "pino": "^9.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "tsx": "^4.0.0",
     "@types/node": "^20.0.0",
-    "@repo/tsconfig": "workspace:*",
     "@repo/eslint-config": "workspace:*",
-    "@repo/types": "workspace:*"
+    "@repo/tsconfig": "workspace:*",
+    "@repo/types": "workspace:*",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
   }
 }

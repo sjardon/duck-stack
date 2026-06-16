@@ -6,7 +6,7 @@ Módulo de la aplicación backend. Cubre la estructura, configuración y lógica
 
 ## SERVICES-001 — Fastify Base Structure
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

@@ -30,10 +30,12 @@ The duck-spec workspace uses these living documents at two layers:
 ```
 duck-spec/
 ├── docs/
-│   ├── ARCHITECTURE.md   # infrastructure, services, deployment decisions
-│   ├── DOMAIN.md         # index of all domain entities, aggregates, and value objects
+│   ├── ARCHITECTURE.md   # monorepo structure, service topology, cross-cutting decisions
+│   ├── INFRASTRUCTURE.md # AWS resources, Terraform, CI/CD
+│   ├── DOMAIN.md         # domain entities, aggregates, and value objects
 │   ├── BACKEND.md        # backend conventions, patterns, and stack
-│   └── FRONTEND.md       # frontend conventions, components, and design system
+│   ├── FRONTEND.md       # frontend conventions, components, and design system
+│   └── SPEC.md           # global index of module functional state
 │
 └── modules/
     └── <module>/
@@ -68,6 +70,10 @@ Update it to reflect the new capabilities introduced by this feature:
 - Do not remove existing content that is still valid
 - Do not copy analysis.md verbatim — write in present tense describing the current state of the module
 
+### 3b. Update global SPEC.md (MANDATORY)
+
+`duck-spec/docs/SPEC.md` is the global index of module functional state. Update the entry for the feature's module (or create it if absent) to reflect the capabilities added by this feature. One short paragraph per module, present tense. Mirror the terse style of existing entries — do not copy from analysis.md.
+
 ### 4. Conditionally update global docs
 
 Read the following docs and update them **only if the feature introduced changes relevant to each**:
@@ -78,7 +84,15 @@ Update if the feature introduced or modified:
 - New inter-service communication patterns
 - Significant changes to data storage or external integrations
 
-Do NOT update for purely in-module logic changes.
+DO NOT update for purely in-module logic changes.
+
+#### `duck-spec/docs/INFRASTRUCTURE.md`
+Update if the feature added or changed:
+- AWS resources (ECR, App Runner, S3, CloudFront, VPC, IAM)
+- Terraform modules or remote state setup
+- CI/CD workflows, environments, or deploy behaviour
+
+DO NOT update for backend code changes, library additions, or in-module logic.
 
 #### `duck-spec/docs/DOMAIN.md`
 Update if the feature introduced or modified:
@@ -138,3 +152,6 @@ Before returning, confirm:
 - Never remove existing valid content from SPEC.md or any global doc.
 - Write in present tense in SPEC.md — describe what the system does, not what was added.
 - Only update global docs when there is a direct, traceable reason from design.md.
+- Write decisions and conventions only. Omit anything derivable from the source tree (file contents, config values, code structure that can be read with `grep` or `Read`).
+- No ASCII diagrams. Use tables instead.
+- No code snippets unless they define a cross-module contract not encapsulated in a single source file.
