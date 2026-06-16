@@ -53,7 +53,7 @@ Crear la estructura base del monorepo con Turborepo, las tres apps y los paquete
 
 ## INFRA-002 — AWS Base Infrastructure (Terraform)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

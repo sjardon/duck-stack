@@ -1,0 +1,33 @@
+# Copy this file to terraform.tfvars and fill in the values for your environment
+# before running `terraform init` and `terraform apply`.
+#
+# Never commit terraform.tfvars to version control — it may contain sensitive values.
+
+project     = "duck-stack"
+environment = "staging"
+aws_region  = "us-east-1"
+
+# VPC CIDR
+vpc_cidr = "10.0.0.0/16"
+
+# Two availability zones — add more entries (with matching subnet CIDRs) for additional AZs
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Public subnets — one per AZ in the same order as availability_zones
+public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+
+# Private subnets — one per AZ in the same order as availability_zones
+private_subnet_cidrs = ["10.0.101.0/24", "10.0.102.0/24"]
+
+# ECR
+ecr_repository_name = "services"
+
+# App Runner
+app_runner_service_name = "duck-stack-services"
+app_runner_port         = 3000
+
+# Optional: runtime environment variables for the App Runner service
+# app_runner_environment_variables = {
+#   NODE_ENV = "production"
+# }
+app_runner_environment_variables = {}
