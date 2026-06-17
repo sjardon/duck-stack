@@ -13,6 +13,8 @@ Living document describing frontend conventions, components, and design system d
 | Language | TypeScript (strict mode via `@repo/tsconfig`) |
 | Module resolution | `Bundler` (inherited from `@repo/tsconfig/base.json`) |
 | Lint | ESLint via `@repo/eslint-config` |
+| Server-state | React Query (`@tanstack/react-query`) — configured in `main.tsx` via `QueryClientProvider` |
+| Client-state | Zustand — two stores (`useSessionStore`, `useUiStore`) in `apps/web/src/store/` |
 
 ## Applications
 
@@ -29,6 +31,41 @@ Living document describing frontend conventions, components, and design system d
 | `build` | `vite build` |
 | `lint` | `eslint src` |
 
+## `apps/web` — Layered architecture
+
+`apps/web/src` is divided into layer directories with a strict unidirectional import rule:
+
+| Layer | Directory | Responsibility |
+|-------|-----------|----------------|
+| HTTP client | `api/` | Raw API calls via `apiFetch`; no React dependencies |
+| Data hooks | `hooks/` | React Query wrappers; consume `api/` and expose query state to pages |
+| Pages | `pages/` | Route-level components; the only place data-fetching hooks are called |
+| Domain components | `components/domain/` | Domain-aware presentational components; receive all data via props from pages |
+| UI components | `components/ui/` | Reusable, domain-agnostic presentational components; must not import from `@repo/types` |
+| Stores | `store/` | Zustand stores for client-side state |
+| Helpers | `lib/` | Generic utility functions with no React dependencies |
+
+Import direction is enforced by convention: `api` → `hooks` → `pages` → `components`. No layer may import from a layer above it.
+
+## `api/client.ts` pattern
+
+All HTTP calls from `apps/web` go through `apiFetch<T>(path, options?)` in `api/client.ts`. The function resolves the base URL from `VITE_API_URL` and attaches an `Authorization: Bearer` header when `options.token` is supplied. When no token is present the header is omitted rather than throwing, so the client is usable before auth is implemented. Non-2xx responses throw a typed `ApiError` (message + status).
+
+Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in turn consumed only by hooks — never by components or pages directly.
+
+## Store structure
+
+| Store | Export | Purpose |
+|-------|--------|---------|
+| `store/session.store.ts` | `useSessionStore` | User session data — populated by the future auth feature |
+| `store/ui.store.ts` | `useUiStore` | Global UI state — extended as UI features are added |
+
+Both stores are created with Zustand and export a single hook. Their interfaces start empty and are extended in-place by each feature that owns new state.
+
+## `lib/` helpers
+
+`lib/formatters.ts` exports `formatDate` and `formatCurrency`. `lib/utils.ts` exports generic helpers. Neither module imports React; they are safe to use in any layer including `api/`.
+
 ## Shared domain types
 
-Frontend apps import shared TypeScript interfaces from `@repo/types` via the pnpm workspace link.
+Frontend apps import shared TypeScript interfaces from `@repo/types` via the pnpm workspace link. `components/ui/` components must not import from `@repo/types` — domain awareness is reserved for `components/domain/` and above.
