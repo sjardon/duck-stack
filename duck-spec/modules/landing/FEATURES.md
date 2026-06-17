@@ -6,7 +6,7 @@ Módulo de la landing page del SaaS. Cubre la estructura y componentes de las p�
 
 ## LANDING-001 — Landing Base Structure
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

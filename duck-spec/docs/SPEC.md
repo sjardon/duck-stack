@@ -24,6 +24,16 @@ See `duck-spec/modules/web/SPEC.md` for full details.
 
 ---
 
+## landing
+
+**Status:** Base structure in place.
+
+`apps/landing` is a Vite + React + TypeScript marketing SPA. Its source is organised into `components/layout/`, `components/sections/`, `components/ui/`, `pages/`, `api/`, and `lib/`. Layout components (`Navbar`, `Footer`) and three independent marketing sections (`Hero`, `Features`, `CTA`) are composed into a single `HomePage` rendered at `/`. UI primitives (`Button`, `Badge`) have no dependencies beyond React. A stub `api/contact.ts` resolves without a network call. React Router handles routing with a catch-all redirect to `/` for unknown paths.
+
+See `duck-spec/modules/landing/SPEC.md` for full details.
+
+---
+
 ## services
 
 **Status:** Fastify base structure in place.
