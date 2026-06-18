@@ -54,6 +54,29 @@ Using the template in `analysis.template.md`, fill in each section by mapping FE
 - State-dependent → `WHILE <state> the system shall <response>`
 - Keep each statement atomic — one observable behavior per row.
 
+**Edge case rule:**
+Every EC entry must specify both:
+1. A concrete trigger: `WHEN <specific event>`
+2. A concrete, observable expected behavior: `the system shall <specific verifiable response>`
+
+Vague behaviors are rejected:
+- ❌ "the system shall not crash"
+- ❌ "routing must degrade gracefully"
+- ✅ "the system shall redirect to `/`"
+- ✅ "the system shall return HTTP 404 with an empty body"
+
+If a FEATURES.md edge case is too vague to produce a concrete expected behavior, infer the most conservative safe behavior and document the assumption inline.
+
+**NF vs. Technical constraints rule:**
+Before assigning an NF-ID, classify each non-functional item:
+
+| Type | Criterion | Goes to |
+|---|---|---|
+| Observable, measurable at runtime | Response time target, availability SLA, accessibility level, security guarantee with measurable outcome | Non-functional requirements (NF-IDs) |
+| Structural or implementation restriction | "no external deps", "components must be composable", "use React Router" | Technical constraints |
+
+When in doubt: if you cannot write a test that observes the behavior at runtime, it is a constraint, not an NF.
+
 **ID rules:**
 - IDs are sequential and zero-padded: R001, R002…, NF001…, EC001…
 - IDs must never be reused within the same analysis.md

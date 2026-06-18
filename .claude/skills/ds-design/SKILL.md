@@ -89,6 +89,15 @@ Using the template in `tasks.template.md`, create one task per atomic, function-
 
 **Task granularity rule:** each task describes what to do in a specific function or method — "In function X do Y." One task = one independently committable change.
 
+**Required task schema — every task must specify:**
+- `id`: T001, T002… (sequential, zero-padded)
+- `file`: exact file path matching an entry in design.md Files section
+- `symbol`: the specific function, class, method, or export being created or modified
+- `action`: one sentence — exactly what to implement in that symbol
+- `covers`: list of R-IDs and NF-IDs this task satisfies
+
+A task with no `file` or no `symbol` is too vague — split it or make it more specific before writing.
+
 **Task ID rules:**
 - IDs are sequential and zero-padded: T001, T002…
 - IDs are never reused within the same tasks.md

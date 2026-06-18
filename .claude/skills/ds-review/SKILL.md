@@ -98,13 +98,14 @@ For each unmet requirement, produce one finding entry:
 {
   "type": "review",
   "severity": "error",
+  "rId": "R003",
   "file": "src/auth/login.ts",
   "line": null,
-  "detail": "R003 not satisfied: WHEN login fails the system shall return a 401 response — implementation returns 500 on invalid credentials"
+  "detail": "WHEN login fails the system shall return a 401 response — implementation returns 500 on invalid credentials"
 }
 ```
 
-- Always prefix `detail` with the R-ID or NF-ID that is not satisfied
+- `rId` must contain the exact R-ID or NF-ID that is not satisfied — never embed it in `detail`
 - `file` should point to the most relevant implementation file; use `null` if the behavior is entirely absent
 - Functional gaps are always `severity: "error"`
 
@@ -119,6 +120,7 @@ For each unmet requirement, produce one finding entry:
     {
       "type": "lint|build|test|review",
       "severity": "error|warning",
+      "rId": "R003",
       "file": "src/auth/login.ts",
       "line": 42,
       "detail": "<exact message>"
@@ -126,6 +128,8 @@ For each unmet requirement, produce one finding entry:
   ]
 }
 ```
+
+`rId` is populated only on `review`-type findings; set to `null` for `lint`, `build`, and `test` findings.
 
 - `status` is `"pass"` if and only if there are zero `error`-severity findings
 - `status` is `"fail"` if there is at least one `error`-severity finding

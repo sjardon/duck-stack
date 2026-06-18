@@ -63,12 +63,15 @@ After implementing all tasks, verify:
   {
     "type": "lint|build|test|review",
     "severity": "error|warning",
+    "rId": "R003",
     "file": "src/auth/login.ts",
     "line": 42,
     "detail": "<description of the finding>"
   }
 ]
 ```
+
+`rId` is populated only for `review`-type findings. For `lint`, `build`, and `test` findings it is `null`.
 
 ### 1. Re-read the three artifacts
 
@@ -79,7 +82,7 @@ Re-read analysis.md, design.md, and tasks.md to restore context.
 Address each entry in `pendingFixes` in the order listed:
 - `lint` / `build` findings: fix the specific file and line reported
 - `test` findings: fix the implementation to make the failing test pass — do not delete or skip tests
-- `review` findings: fix the functional gap described; cross-reference the R-ID in analysis.md to understand the expected behavior
+- `review` findings: use the `rId` field directly to look up the EARS statement in analysis.md — do not parse the R-ID from `detail`; fix the functional gap so the implementation satisfies that statement
 
 Do not make changes beyond what is needed to resolve the reported findings.
 
@@ -96,12 +99,13 @@ Do not make changes beyond what is needed to resolve the reported findings.
   "pendingFixes": [],
   "result": {
     "status": "success|failure",
+    "addressedRIds": ["R003"],
     "error": null
   }
 }
 ```
 
-Always clear `pendingFixes` in the returned context — ds-review will repopulate it if new findings remain.
+`addressedRIds` lists the R-IDs fixed during a retry run (empty array on first run). Always clear `pendingFixes` in the returned context — ds-review will repopulate it if new findings remain.
 
 ## Rules
 
