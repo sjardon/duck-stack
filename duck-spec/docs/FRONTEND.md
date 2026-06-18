@@ -66,6 +66,23 @@ Both stores are created with Zustand and export a single hook. Their interfaces 
 
 `lib/formatters.ts` exports `formatDate` and `formatCurrency`. `lib/utils.ts` exports generic helpers. Neither module imports React; they are safe to use in any layer including `api/`.
 
+## `apps/landing` — Marketing SPA structure
+
+`apps/landing` uses a flat layer model adapted from the `apps/web` approach but without data-fetching or state management concerns. Folders map directly to responsibility:
+
+| Layer | Directory | Responsibility |
+|-------|-----------|----------------|
+| Layout chrome | `components/layout/` | Structural components (`Navbar`, `Footer`) rendered on every page; stateless, no props |
+| Marketing sections | `components/sections/` | Independent, composable marketing blocks; stateless, no cross-section imports |
+| UI primitives | `components/ui/` | Domain-agnostic components (`Button`, `Badge`); must not import beyond React |
+| Pages | `pages/` | Route-level composition; imports only from `components/layout/` and `components/sections/` |
+| API stubs | `api/` | Network modules; stubs resolve locally until a real backend endpoint exists |
+| Helpers | `lib/` | React-free generic utilities |
+
+Section components in `components/sections/` must remain independent of each other — no cross-section imports are permitted. Order of composition is determined solely by the page component. `components/ui/` components must not import any library other than React.
+
+`apps/landing` deliberately omits React Query, Zustand, and `@repo/types`. These are intentional exclusions that match the lightweight nature of a marketing SPA and must not be introduced without a new feature explicitly scoping that addition.
+
 ## Shared domain types
 
 Frontend apps import shared TypeScript interfaces from `@repo/types` via the pnpm workspace link. `components/ui/` components must not import from `@repo/types` — domain awareness is reserved for `components/domain/` and above.
