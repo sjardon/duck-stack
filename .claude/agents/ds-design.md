@@ -7,6 +7,7 @@ model: sonnet
 tools:
   - Read
   - Write
+  - Bash
 ---
 
 Design a feature and produce design.md and tasks.md. Follow the instructions from the preloaded skill.

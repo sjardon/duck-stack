@@ -7,6 +7,7 @@ model: opus
 tools:
   - Read
   - Write
+  - Bash
 ---
 
 Analyse a feature and produce analysis.md. Follow the instructions from the preloaded skill.

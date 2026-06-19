@@ -8,6 +8,7 @@ tools:
   - Read
   - Edit
   - Write
+  - Bash
 ---
 
 Implement pending tasks from tasks.md. Follow the instructions from the preloaded skill.

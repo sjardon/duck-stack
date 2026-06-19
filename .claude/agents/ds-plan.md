@@ -8,6 +8,7 @@ tools:
   - Read
   - Edit
   - Write
+  - Bash
 ---
 
 Plan a new feature interactively. Follow the instructions from the preloaded skill.

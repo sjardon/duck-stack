@@ -6,6 +6,8 @@ skills:
 model: sonnet
 tools:
   - Agent
+  - Read
+  - Write
 ---
 
 Orchestrate the full duck-spec workflow for a feature. Follow the instructions from the preloaded skill.
