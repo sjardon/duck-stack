@@ -13,8 +13,10 @@ Living document describing frontend conventions, components, and design system d
 | Language | TypeScript (strict mode via `@repo/tsconfig`) |
 | Module resolution | `Bundler` (inherited from `@repo/tsconfig/base.json`) |
 | Lint | ESLint via `@repo/eslint-config` |
+| Routing | React Router DOM — `createBrowserRouter` in `apps/web/src/router.tsx` |
 | Server-state | React Query (`@tanstack/react-query`) — configured in `main.tsx` via `QueryClientProvider` |
 | Client-state | Zustand — two stores (`useSessionStore`, `useUiStore`) in `apps/web/src/store/` |
+| Auth | Clerk via `@clerk/clerk-react` — `ClerkProvider` wraps the React tree in `main.tsx` |
 
 ## Applications
 
@@ -53,14 +55,44 @@ All HTTP calls from `apps/web` go through `apiFetch<T>(path, options?)` in `api/
 
 Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in turn consumed only by hooks — never by components or pages directly.
 
+## `apps/web` — Auth conventions
+
+`ClerkProvider` is placed outside `QueryClientProvider` in `main.tsx` so Clerk state is available to all hooks and query functions. The publishable key is read from `VITE_CLERK_PUBLISHABLE_KEY`; the application throws before rendering if the variable is absent.
+
+### AuthGuard
+
+`components/auth/AuthGuard.tsx` is a layout route component used in the router to gate protected sections. It reads `useAuth().isSignedIn` from `@clerk/clerk-react`. While Clerk is initialising it renders a loading state. When `isSignedIn` is false it navigates to `/sign-in` with `replace`. When true it renders `<Outlet />`.
+
+### Auth-related hooks
+
+| Export | File | Returns |
+|--------|------|---------|
+| `useCurrentUser` | `hooks/use-current-user.ts` | `UserResource \| null` — wraps Clerk's `useUser` |
+| `useCurrentOrg` | `hooks/use-current-org.ts` | `OrganizationResource \| null` — wraps Clerk's `useOrganization` |
+
+Both return `null` when the resource is not loaded or not present. Components that need the current user or active organization import these hooks rather than calling Clerk hooks directly.
+
+### Organization pages
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/org/create` | `pages/org/CreateOrgPage.tsx` | Renders Clerk's `<CreateOrganization />` |
+| `/org/profile` | `pages/org/OrgProfilePage.tsx` | Renders Clerk's `<OrganizationProfile />` (including invitation management) |
+
+Both routes are wrapped by `AuthGuard`.
+
+### AppLayout
+
+`components/layout/AppLayout.tsx` is the authenticated layout shell. It renders `<UserButton />` from `@clerk/clerk-react` in the header, providing in-place sign-out and account management for every authenticated page.
+
 ## Store structure
 
 | Store | Export | Purpose |
 |-------|--------|---------|
-| `store/session.store.ts` | `useSessionStore` | User session data — populated by the future auth feature |
+| `store/session.store.ts` | `useSessionStore` | User session state: `userId: string \| null` and `token: () => Promise<string \| null>`. `token` wraps Clerk's `getToken()` so `api/client.ts` can attach a fresh JWT without importing Clerk directly. |
 | `store/ui.store.ts` | `useUiStore` | Global UI state — extended as UI features are added |
 
-Both stores are created with Zustand and export a single hook. Their interfaces start empty and are extended in-place by each feature that owns new state.
+Both stores are created with Zustand and export a single hook. Their interfaces are extended in-place by each feature that owns new state.
 
 ## `lib/` helpers
 

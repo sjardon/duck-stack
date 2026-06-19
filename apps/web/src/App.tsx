@@ -1,5 +1,6 @@
-import HealthPage from './pages/health/HealthPage';
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router";
 
 export default function App() {
-  return <HealthPage />;
+  return <RouterProvider router={router} />;
 }

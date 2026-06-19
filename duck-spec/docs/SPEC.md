@@ -41,3 +41,13 @@ See `duck-spec/modules/landing/SPEC.md` for full details.
 `apps/services` exposes a `GET /health` endpoint and implements a simplified hexagonal architecture with vertical slicing. Shared infrastructure (logger, Supabase client, error handler, CORS, helmet) is wired once in `src/app.ts`; feature modules register routes as Fastify plugins.
 
 See `duck-spec/modules/services/SPEC.md` for full details.
+
+---
+
+## auth
+
+**Status:** Clerk integration implemented.
+
+Clerk is the end-to-end identity provider. `apps/web` renders Clerk's `<SignIn />`, `<SignUp />`, `<CreateOrganization />`, and `<OrganizationProfile />` components at their respective routes. An `AuthGuard` component redirects unauthenticated users to `/sign-in`. `useCurrentUser` and `useCurrentOrg` hooks wrap Clerk's `useUser` and `useOrganization`. `apps/services` verifies Clerk JWTs locally via a global Fastify plugin (`clerk-auth.plugin.ts`) using a cached JWKS key — no per-request Clerk API call. Requests are decorated with `userId` and `orgId`; `requireAuth` and `requireOrg` preHandlers enforce 401/403 at the route level. Organization multi-tenancy is opt-in: no route requires `orgId` at the starter level.
+
+See `duck-spec/modules/auth/SPEC.md` for full details.

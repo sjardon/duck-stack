@@ -6,7 +6,7 @@ Módulo de autenticación y gestión de tenants. Cubre la integración de Clerk 
 
 ## AUTH-001 — Clerk Authentication Integration
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

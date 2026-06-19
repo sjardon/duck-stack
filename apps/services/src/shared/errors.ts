@@ -26,3 +26,9 @@ export class UnauthorizedError extends DomainError {
     super('UNAUTHORIZED', 'Unauthorized', 401);
   }
 }
+
+export class ForbiddenError extends DomainError {
+  constructor() {
+    super('FORBIDDEN', 'Forbidden', 403);
+  }
+}

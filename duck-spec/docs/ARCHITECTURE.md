@@ -28,9 +28,17 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
 | `apps/services` | Fastify + TypeScript | Backend API. Containerised; deployed to AWS App Runner via ECR. |
 
+## External integrations
+
+| Integration | Service | Role |
+|-------------|---------|------|
+| Clerk | `apps/web`, `apps/services` | End-to-end identity provider. `apps/web` manages user sessions via `@clerk/clerk-react`. `apps/services` verifies Clerk JWTs locally via `@clerk/backend` (JWKS cached at startup; no per-request Clerk API call). |
+
 ## Inter-service communication
 
 `apps/web` calls `apps/services` over HTTP using the `VITE_API_URL` environment variable as the base URL. All calls are routed through `api/client.ts` (`apiFetch`). In development `VITE_API_URL` defaults to `http://localhost:3000`; in production it points to the App Runner service URL.
+
+Authenticated requests include an `Authorization: Bearer <token>` header. `api/client.ts` reads the token from `useSessionStore.token()`, which wraps Clerk's `getToken()`. `apps/services` verifies the token in a global `onRequest` hook before any route handler runs.
 
 ## Shared packages
 
