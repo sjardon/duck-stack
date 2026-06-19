@@ -1,6 +1,6 @@
 ---
 name: ds-plan
-description: Interactive planning skill. Takes a free-form idea and guides the user through a conversation to produce a well-formed FEATURES.md entry. Handles module assignment, scope definition, and requirement elicitation before writing anything.
+description: Interactive planning skill. Takes a free-form idea and guides the user through a conversation to produce a well-formed FEATURES.md entry. Handles module assignment, scope definition, and requirement elicitation before writing anything. Use when a free-form feature idea needs to be formalized into a FEATURES.md entry.
 ---
 
 # Duck-Spec Plan

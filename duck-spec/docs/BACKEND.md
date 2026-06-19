@@ -41,7 +41,14 @@ Every request gets a UUID via `genReqId`. `LOG_LEVEL` env var controls level (de
 
 ## Domain error model
 
-All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, message: string, statusCode: number)`. Built-in typed errors: `NotFoundError` (404), `ValidationError` (400), `UnauthorizedError` (401).
+All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, message: string, statusCode: number)`. Built-in typed errors:
+
+| Error class | Status | Code |
+|-------------|--------|------|
+| `NotFoundError` | 404 | `NOT_FOUND` |
+| `ValidationError` | 400 | `VALIDATION_ERROR` |
+| `UnauthorizedError` | 401 | `UNAUTHORIZED` |
+| `ForbiddenError` | 403 | `FORBIDDEN` |
 
 `shared/plugins/error-handler.ts` intercepts `DomainError` and replies `{ code, message }` at the error's `statusCode`. Unknown errors fall through to Fastify's default handler.
 
@@ -50,6 +57,34 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 Registered globally in `app.ts`:
 - `shared/plugins/cors.ts` — `CORS_ORIGIN` env var controls allowed origin (default `*` outside production)
 - `shared/plugins/helmet.ts` — default `@fastify/helmet` options on every response
+
+## Authentication plugin
+
+`shared/plugins/clerk-auth.plugin.ts` is registered via `fastify-plugin` immediately after the security plugins so its `onRequest` hook fires on all routes. The plugin:
+
+1. Reads `CLERK_SECRET_KEY` from `process.env` at registration time; throws if absent.
+2. Creates a Clerk client via `@clerk/backend`'s `createClerkClient`, which fetches and caches Clerk's JWKS key set once. No Clerk API call occurs per request.
+3. Registers a global `onRequest` hook that extracts the `Authorization: Bearer <token>` header, calls `verifyToken`, and decorates the request with `userId` and `orgId`.
+
+`FastifyRequest` is augmented in `src/types/fastify.d.ts`:
+
+| Property | Type |
+|----------|------|
+| `userId` | `string \| undefined` |
+| `orgId` | `string \| null \| undefined` |
+
+`userId` and `orgId` are `undefined` when no `Authorization` header is present or when verification fails. `orgId` is `null` when the JWT is valid but carries no organization claim.
+
+## Route-level auth preHandlers
+
+Two reusable preHandler functions live in `src/shared/plugins/`:
+
+| Export | File | Behavior |
+|--------|------|----------|
+| `requireAuth` | `require-auth.ts` | Throws `UnauthorizedError` (401) when `request.userId` is `undefined` |
+| `requireOrg` | `require-org.ts` | Calls `requireAuth`, then throws `ForbiddenError` (403) when `request.orgId` is `null` |
+
+Neither preHandler is registered globally. Routes opt in by listing the relevant function in their `preHandler` array. Organization-scoped enforcement is a per-route decision — the starter does not impose it globally.
 
 ## Supabase client
 

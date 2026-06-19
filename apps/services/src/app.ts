@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import errorHandlerPlugin from './shared/plugins/error-handler.js';
 import corsPlugin from './shared/plugins/cors.js';
 import helmetPlugin from './shared/plugins/helmet.js';
+import clerkAuthPlugin from './shared/plugins/clerk-auth.plugin.js';
 import healthRoutes from './modules/health/routes.js';
 
 export async function createApp(): Promise<FastifyInstance> {
@@ -21,6 +22,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await fastify.register(errorHandlerPlugin);
   await fastify.register(corsPlugin);
   await fastify.register(helmetPlugin);
+  await fastify.register(clerkAuthPlugin);
   await fastify.register(healthRoutes);
 
   return fastify;

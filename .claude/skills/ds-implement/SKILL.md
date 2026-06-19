@@ -1,6 +1,6 @@
 ---
 name: ds-implement
-description: Reads analysis.md, design.md, and tasks.md and implements all pending tasks. On retry, receives pendingFixes from ds-review and only addresses those findings. Sets lastStep to "implement".
+description: Reads analysis.md, design.md, and tasks.md and implements all pending tasks. On retry, receives pendingFixes from ds-review and only addresses those findings. Sets lastStep to "implement". Use when design.md and tasks.md exist and code needs to be written, or when pendingFixes from ds-review require resolution.
 ---
 
 # Duck-Spec Implement

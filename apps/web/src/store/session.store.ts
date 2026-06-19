@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 
-// extensible — populated by future auth feature
-interface SessionState {}
+interface SessionState {
+  userId: string | null;
+  token: () => Promise<string | null>;
+}
 
-export const useSessionStore = create<SessionState>()(() => ({}));
+export const useSessionStore = create<SessionState>()(() => ({
+  userId: null,
+  token: async () => null,
+}));

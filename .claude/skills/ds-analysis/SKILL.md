@@ -1,6 +1,6 @@
 ---
 name: ds-analysis
-description: Takes a feature from FEATURES.md and produces analysis.md with EARS requirements (R-IDs), out-of-scope, and edge cases. Sets the effort field in the shared context.
+description: Takes a feature from FEATURES.md and produces analysis.md with EARS requirements (R-IDs), out-of-scope, and edge cases. Sets the effort field in the shared context. Use when starting implementation of a feature and analysis.md does not yet exist.
 ---
 
 # Duck-Spec Analysis
