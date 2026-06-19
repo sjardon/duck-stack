@@ -14,7 +14,8 @@
     "@supabase/supabase-js": "^2.0.0",
     "fastify": "^4.0.0",
     "fastify-plugin": "^4.0.0",
-    "pino": "^9.0.0"
+    "pino": "^9.0.0",
+    "svix": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

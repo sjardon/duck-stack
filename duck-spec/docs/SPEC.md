@@ -46,8 +46,8 @@ See `duck-spec/modules/services/SPEC.md` for full details.
 
 ## auth
 
-**Status:** Clerk integration implemented.
+**Status:** Clerk integration implemented; Supabase schema and webhook sync in place.
 
-Clerk is the end-to-end identity provider. `apps/web` renders Clerk's `<SignIn />`, `<SignUp />`, `<CreateOrganization />`, and `<OrganizationProfile />` components at their respective routes. An `AuthGuard` component redirects unauthenticated users to `/sign-in`. `useCurrentUser` and `useCurrentOrg` hooks wrap Clerk's `useUser` and `useOrganization`. `apps/services` verifies Clerk JWTs locally via a global Fastify plugin (`clerk-auth.plugin.ts`) using a cached JWKS key — no per-request Clerk API call. Requests are decorated with `userId` and `orgId`; `requireAuth` and `requireOrg` preHandlers enforce 401/403 at the route level. Organization multi-tenancy is opt-in: no route requires `orgId` at the starter level.
+Clerk is the end-to-end identity provider. `apps/web` renders Clerk's `<SignIn />`, `<SignUp />`, `<CreateOrganization />`, and `<OrganizationProfile />` components at their respective routes. An `AuthGuard` component redirects unauthenticated users to `/sign-in`. `useCurrentUser` and `useCurrentOrg` hooks wrap Clerk's `useUser` and `useOrganization`. `apps/services` verifies Clerk JWTs locally via a global Fastify plugin (`clerk-auth.plugin.ts`) using a cached JWKS key — no per-request Clerk API call. Requests are decorated with `userId` and `orgId`; `requireAuth` and `requireOrg` preHandlers enforce 401/403 at the route level. Organization multi-tenancy is opt-in: no route requires `orgId` at the starter level. Supabase holds local mirrors of Clerk identity data in three tables (`users`, `organizations`, `organization_members`), kept in sync via `POST /webhooks/clerk` in `apps/services` — a Svix-verified webhook endpoint that handles `user.created`, `user.updated`, `organization.created`, and `organizationMembership.created` events with idempotent upsert semantics.
 
 See `duck-spec/modules/auth/SPEC.md` for full details.
