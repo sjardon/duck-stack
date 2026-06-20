@@ -44,6 +44,26 @@ See `duck-spec/modules/services/SPEC.md` for full details.
 
 ---
 
+## billing
+
+**Status:** Planned — not yet implemented.
+
+Four features designed: provider abstraction layer (port/adapter for multi-provider support), checkout & transaction records, payment webhooks, and refunds. Initial provider: Mobbex.
+
+See `duck-spec/modules/billing/SPEC.md` for full details.
+
+---
+
+## subscriptions
+
+**Status:** Planned — not yet implemented.
+
+Five features designed: subscription plans (Supabase table + seed), subscribe/cancel flow, lifecycle webhooks (recurring payment events), frontend pricing page and billing settings, and entitlement gate (feature flags by plan). Depends on `billing` module for provider abstraction.
+
+See `duck-spec/modules/subscriptions/SPEC.md` for full details.
+
+---
+
 ## auth
 
 **Status:** Clerk integration implemented; Supabase schema and webhook sync in place.

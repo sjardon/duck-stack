@@ -24,12 +24,13 @@ Read the user's idea. Identify which FEATURES.md fields you can derive confident
 Fields that often need clarification:
 - **Contexto**: what is the current state of the system that makes this needed?
 - **Objetivo**: what specific problem does this feature solve? (often implied — confirm it)
-- **Requerimientos funcionales**: what specific user-visible behaviors are expected?
+- **Requerimientos funcionales**: what specific user-visible behaviors are expected? Capture only observable behaviors — what the user or an external system experiences. Do NOT include SQL schema, HTTP response shapes, internal IDs, library names, or implementation logic. If a detail describes how something is built rather than what it does, exclude it.
 - **Fuera de scope**: what should explicitly NOT be included?
 - **Requerimientos no funcionales**: any performance, security, or reliability concerns?
 - **Edge cases**: any tricky scenarios to handle?
-- **Technical constraints**: any technical decisions already made?
 - **Dependencias**: does this depend on other features that haven't been built yet?
+
+`Technical constraints` is an optional field filled only when the **user explicitly raises** an implementation decision (e.g., "we must use X", "it has to integrate with Y"). Do not ask about it proactively. Do not infer or suggest constraints on your own.
 
 Ask questions **one topic at a time** — do not dump a list of all gaps at once. Start with the most important unknown (usually scope or the core behavior), then continue with follow-ups as the user responds.
 
@@ -72,7 +73,7 @@ Wait for the user's response. The user may:
 
 ### Phase 5 — Write the FEATURES.md entry
 
-Using the FEATURES.md template format (read `FEATURES.template.md` in this skill's directory for the exact format), write the new entry.
+Using the FEATURES.md template format (read `features.template.md` in this skill's directory for the exact format), write the new entry.
 
 **If `duck-spec/modules/<module>/FEATURES.md` exists**: append the new entry at the end of the file.
 
@@ -91,6 +92,8 @@ Set `Estado` to `TODO`.
 - Never scope a feature to cover things explicitly placed out of scope.
 - If the idea is too broad to be a single feature, say so and help the user split it before assigning IDs.
 - Ask one question at a time — do not overwhelm the user.
+- Requerimientos funcionales must describe observable behavior only. Never include SQL column definitions, specific HTTP response shapes, internal ID generation logic, library names, or patterns (e.g., Port & Adapter, singleton) inside RF items — those belong in design.md, not FEATURES.md.
+- Content in `Technical constraints` must never bleed into `Requerimientos funcionales`. TC entries are constraints that informed the design; RF entries are behaviors the system must exhibit.
 - The conversation ends when the entry is written. Return the feature ID and file path so the user can hand them to ds-orchestrate.
 
 ---
