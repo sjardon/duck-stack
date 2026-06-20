@@ -63,7 +63,7 @@ Integrar Clerk en `web` y `services` para soportar autenticación con email + pa
 
 ## AUTH-002 — Supabase Schema & Clerk Sync
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

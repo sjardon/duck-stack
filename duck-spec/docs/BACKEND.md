@@ -90,6 +90,18 @@ Neither preHandler is registered globally. Routes opt in by listing the relevant
 
 `shared/infrastructure/supabase.ts` exports a singleton created from `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Throws at startup if either is absent. Repositories import this singleton directly.
 
+## Webhook modules
+
+Webhook endpoints are feature modules, not shared plugins. Each provider's webhook handler lives under `src/modules/webhooks/<provider>/` and is registered in `app.ts` as a scoped Fastify plugin.
+
+**Raw body requirement.** Webhook signature verification libraries (e.g. Svix) require the unmodified request bytes. Because Fastify v4 does not support a global `rawBody` option, webhook plugins register a scoped `addContentTypeParser('application/json', { parseAs: 'buffer' }, ...)` override. This causes `request.body` to arrive as a `Buffer` inside the plugin's route context only — other routes are unaffected.
+
+**Registration order.** Webhook plugins must be registered in `app.ts` before `clerkAuthPlugin` so the global `onRequest` auth hook does not attempt JWT verification on routes that carry no `Authorization` header by design.
+
+**Fail-fast secret check.** Each webhook plugin reads its signing secret from `process.env` at registration time and throws `Error` immediately if the variable is absent. This prevents the route from ever being served without signature verification.
+
+**Repository pattern.** All database calls within a webhook module are centralized in a `<Provider>SyncRepository` class. Handler functions receive a repository instance via constructor injection and call typed methods (`upsertUser`, `upsertOrganization`, `createMembership`, etc.). This keeps SQL logic testable in isolation and out of handler/dispatcher code.
+
 ## Scripts
 
 | Script | Command |
