@@ -5,16 +5,18 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@clerk/backend": "^1.0.0",
     "@fastify/cors": "^9.0.0",
     "@fastify/helmet": "^11.0.0",
-    "postgres": "^3.0.0",
     "fastify": "^4.0.0",
     "fastify-plugin": "^4.0.0",
     "pino": "^9.0.0",
+    "postgres": "^3.0.0",
     "svix": "^1.0.0",
     "zod": "^4.4.3"
   },
@@ -22,8 +24,11 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/types": "workspace:*",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
+    "jest": "^30.4.2",
     "pino-pretty": "^13.0.0",
+    "ts-jest": "^29.4.11",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }

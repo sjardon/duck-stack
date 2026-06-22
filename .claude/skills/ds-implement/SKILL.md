@@ -37,12 +37,12 @@ Read all three files before writing any code:
 
 ### 2. Implement tasks in order
 
-Work through every task in tasks.md in the order they are listed (tasks are already sorted by dependency).
+Work through every task in tasks.md in listed order. Tasks are grouped by R-ID in test→implement→refactor sequence.
 
 For each task:
-1. Locate the file(s) listed in the task's description and the Files section of design.md
-2. Implement exactly what the task describes — no more, no less
-3. Do not add features, refactoring, or abstractions beyond what the task requires
+- `type: test` — write the acceptance test file. Express the EARS statement as a failing case (production code does not exist yet). Do not run the test yet.
+- `type: implement` — write the production code that makes the preceding test pass. Implement exactly what the task describes — no more, no less.
+- `type: refactor` — clean up the implementation without changing behavior. Only present when ds-design included it.
 
 **Constraints from analysis.md are hard limits** — do not implement anything that would violate a technical constraint or an out-of-scope item.
 

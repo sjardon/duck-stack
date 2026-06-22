@@ -87,27 +87,27 @@ Write the output to: `duck-spec/modules/<module>/<feature-dir>/design.md`
 
 Using the template in `tasks.template.md`, create one task per atomic, function-level unit of work.
 
-**Task granularity rule:** each task describes what to do in a specific function or method — "In function X do Y." One task = one independently committable change.
+**Task granularity rule:** one task per atomic function-level unit of work.
 
 **Required task schema — every task must specify:**
 - `id`: T001, T002… (sequential, zero-padded)
+- `type`: `test` | `implement` | `refactor`
 - `file`: exact file path matching an entry in design.md Files section
 - `symbol`: the specific function, class, method, or export being created or modified
-- `action`: one sentence — exactly what to implement in that symbol
+- `action`: one sentence — exactly what to do in that symbol
 - `covers`: list of R-IDs and NF-IDs this task satisfies
 
-A task with no `file` or no `symbol` is too vague — split it or make it more specific before writing.
+**ATDD ordering rule:** for each R-ID, generate tasks in this sequence:
+1. `test` task — write the acceptance test for the R-ID (test file in `tests/` of the relevant app)
+2. `implement` task — implement the production code
+3. `refactor` task (optional) — only when the design calls for a non-trivial cleanup step
 
-**Task ID rules:**
-- IDs are sequential and zero-padded: T001, T002…
-- IDs are never reused within the same tasks.md
+Tasks must also be ordered by dependency: if T002 depends on T001, T002 comes after it.
 
-**Covers field rules:**
-- List the R-IDs and NF-IDs from analysis.md that this task satisfies
+**Coverage rules:**
 - Every R-ID from analysis.md must be covered by at least one task
 - A task may cover multiple IDs; an ID may be covered by multiple tasks
-
-**Ordering rule:** tasks must be listed in dependency order — a task that depends on another must come after it.
+- No task references an ID not in analysis.md
 
 Write the output to: `duck-spec/modules/<module>/<feature-dir>/tasks.md`
 

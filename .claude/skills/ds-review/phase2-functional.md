@@ -13,6 +13,18 @@ Read all three files:
 
 Read every file listed under `Files` in design.md. These are the only files in scope for functional verification.
 
+## 2.5 Verify acceptance test coverage
+
+For each R-ID in analysis.md, check that an acceptance test exists in the `tests/` directory of the relevant app referencing that R-ID (by name in the describe/it block or a comment).
+
+- If a test exists: confirm it passed in Phase 1 results. If it failed, Phase 1 already captured it — skip duplicate.
+- If no test exists for an R-ID: produce a finding:
+  ```json
+  { "type": "review", "severity": "error", "rId": "R001", "file": null, "line": null, "detail": "No acceptance test found for R001" }
+  ```
+
+Continue with Step 3 for all R-IDs regardless of test presence.
+
 ## 3. Verify each requirement
 
 For every R-ID in analysis.md, verify that the implementation satisfies the EARS statement:
