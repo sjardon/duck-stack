@@ -163,7 +163,7 @@ Exponer un endpoint de perfil autenticado y una página de perfil en `web` que m
 
 ## AUTH-004 — Onboarding
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

@@ -6,6 +6,7 @@ import SignUpPage from "./pages/auth/SignUpPage";
 import CreateOrgPage from "./pages/org/CreateOrgPage";
 import OrgProfilePage from "./pages/org/OrgProfilePage";
 import ProfilePage from "./pages/profile/ProfilePage";
+import OnboardingPage from "./pages/onboarding/OnboardingPage";
 
 export const router = createBrowserRouter([
   {
@@ -19,6 +20,10 @@ export const router = createBrowserRouter([
   {
     element: <AuthGuard />,
     children: [
+      {
+        path: "/onboarding",
+        element: <OnboardingPage />,
+      },
       {
         path: "/org/create",
         element: <CreateOrgPage />,

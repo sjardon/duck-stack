@@ -61,7 +61,12 @@ Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in tu
 
 ### AuthGuard
 
-`components/auth/AuthGuard.tsx` is a layout route component used in the router to gate protected sections. It reads `useAuth().isSignedIn` from `@clerk/clerk-react`. While Clerk is initialising it renders a loading state. When `isSignedIn` is false it navigates to `/sign-in` with `replace`. When true it renders `<Outlet />`.
+`components/auth/AuthGuard.tsx` is a layout route component used in the router to gate protected sections. It enforces two sequential conditions before rendering `<Outlet />`:
+
+1. **Authentication** — reads `useAuth().isSignedIn` from `@clerk/clerk-react`. While Clerk is initialising it renders a loading state. When `isSignedIn` is false it navigates to `/sign-in` with `replace`.
+2. **Onboarding completion** — calls `useUserProfile()` to read `onboarding_completed`. While the profile is loading or has errored it holds in a neutral loading state without redirecting. Once loaded, if `onboarding_completed` is `false` and the current path is not `/onboarding` it renders `<Navigate to="/onboarding" replace />` before any protected page is mounted (satisfying the pre-render redirect requirement). If `onboarding_completed` is `true` and the current path is `/onboarding` it redirects to `/` instead.
+
+Individual page components must not duplicate the onboarding gating check — that logic lives exclusively in `AuthGuard`.
 
 ### Auth-related hooks
 
@@ -71,8 +76,9 @@ Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in tu
 | `useCurrentOrg` | `hooks/use-current-org.ts` | `OrganizationResource \| null` — wraps Clerk's `useOrganization` |
 | `useUserProfile` | `hooks/use-user-profile.ts` | React Query `useQuery` result for `UserProfile`; key `['users', 'me']` |
 | `useUpdateProfile` | `hooks/use-user-profile.ts` | React Query `useMutation` for `PATCH /users/me`; invalidates `['users', 'me']` on success |
+| `useCompleteOnboarding` | `hooks/use-user-profile.ts` | React Query `useMutation` for `POST /users/me/onboarding`; invalidates `['users', 'me']` on success |
 
-`useCurrentUser` and `useCurrentOrg` return `null` when the resource is not loaded or not present. Components that need the current user or active organization import these hooks rather than calling Clerk hooks directly. `useUserProfile` and `useUpdateProfile` back the `/profile` page; they call `api/users.ts` which uses `apiFetch` with a bearer token from `useAuth().getToken()`.
+`useCurrentUser` and `useCurrentOrg` return `null` when the resource is not loaded or not present. Components that need the current user or active organization import these hooks rather than calling Clerk hooks directly. `useUserProfile`, `useUpdateProfile`, and `useCompleteOnboarding` all share the `['users', 'me']` query key — mutations invalidate it so the profile is refetched automatically after any change. They call `api/users.ts` which uses `apiFetch` with a bearer token from `useAuth().getToken()`.
 
 ### Organization pages
 
@@ -90,6 +96,14 @@ Both routes are wrapped by `AuthGuard`.
 | `/profile` | `pages/profile/ProfilePage.tsx` | Renders the authenticated user's profile and a form to edit `locale` and `timezone` |
 
 The page is wrapped by `AuthGuard`. It fetches data via `useUserProfile` on mount and submits changes via `useUpdateProfile`. Success and error states are surfaced as visible feedback without leaving the page. When `avatar_url` is `null`, a fallback avatar placeholder is rendered instead of a broken image.
+
+### Onboarding page
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/onboarding` | `pages/onboarding/OnboardingPage.tsx` | First-access segmentation form for new users |
+
+The page is wrapped by `AuthGuard`. It renders a welcome message and a form with three inputs (`job_role`, `company_size`, `primary_use_case`) plus a submit button. Submission fires `useCompleteOnboarding`; on success the page navigates to `/`. `AuthGuard` prevents users who have already completed onboarding from reaching this page. This page is the only path through which `onboarding_completed` transitions from `false` to `true` in the frontend flow.
 
 ### AppLayout
 
