@@ -36,9 +36,9 @@ See `duck-spec/modules/landing/SPEC.md` for full details.
 
 ## services
 
-**Status:** Fastify base structure in place.
+**Status:** Fastify base structure in place; postgres.js direct database client in use.
 
-`apps/services` exposes a `GET /health` endpoint and implements a simplified hexagonal architecture with vertical slicing. Shared infrastructure (logger, Supabase client, error handler, CORS, helmet) is wired once in `src/app.ts`; feature modules register routes as Fastify plugins.
+`apps/services` exposes a `GET /health` endpoint and implements a simplified hexagonal architecture with vertical slicing. Shared infrastructure (logger, postgres.js client, error handler, CORS, helmet) is wired once in `src/app.ts`; feature modules register routes as Fastify plugins. All database operations run via a `postgres.js` singleton (`shared/infrastructure/db.ts`) connected to Postgres over TCP — no HTTP intermediary. `@supabase/supabase-js` is not a runtime dependency.
 
 See `duck-spec/modules/services/SPEC.md` for full details.
 

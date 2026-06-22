@@ -60,7 +60,7 @@ Establecer la estructura base de la app Fastify con arquitectura hexagonal simpl
 
 ## SERVICES-002 — Replace Supabase JS client with direct Postgres driver
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

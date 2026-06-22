@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Sql } from 'postgres';
 
 export interface UpsertUserData {
   clerkUserId: string;
@@ -20,54 +20,35 @@ export interface CreateMembershipData {
 }
 
 export class ClerkSyncRepository {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly sql: Sql) {}
 
   async upsertUser(data: UpsertUserData): Promise<void> {
-    const { error } = await this.supabase.from('users').upsert(
-      {
-        clerk_user_id: data.clerkUserId,
-        email: data.email,
-        name: data.name,
-        avatar_url: data.avatarUrl,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'clerk_user_id' },
-    );
-
-    if (error) {
-      throw new Error(`Failed to upsert user: ${error.message}`);
-    }
+    await this.sql`
+      INSERT INTO users (clerk_user_id, email, name, avatar_url, updated_at)
+      VALUES (${data.clerkUserId}, ${data.email}, ${data.name}, ${data.avatarUrl}, ${new Date().toISOString()})
+      ON CONFLICT (clerk_user_id) DO UPDATE
+        SET email = EXCLUDED.email,
+            name = EXCLUDED.name,
+            avatar_url = EXCLUDED.avatar_url,
+            updated_at = EXCLUDED.updated_at`;
   }
 
   async upsertOrganization(data: UpsertOrganizationData): Promise<void> {
-    const { error } = await this.supabase.from('organizations').upsert(
-      {
-        clerk_org_id: data.clerkOrgId,
-        name: data.name,
-        slug: data.slug,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'clerk_org_id' },
-    );
-
-    if (error) {
-      throw new Error(`Failed to upsert organization: ${error.message}`);
-    }
+    await this.sql`
+      INSERT INTO organizations (clerk_org_id, name, slug, updated_at)
+      VALUES (${data.clerkOrgId}, ${data.name}, ${data.slug}, ${new Date().toISOString()})
+      ON CONFLICT (clerk_org_id) DO UPDATE
+        SET name = EXCLUDED.name,
+            slug = EXCLUDED.slug,
+            updated_at = EXCLUDED.updated_at`;
   }
 
   async createMembership(data: CreateMembershipData): Promise<void> {
     // Resolve local user UUID from clerk_user_id
-    const { data: userRow, error: userError } = await this.supabase
-      .from('users')
-      .select('id')
-      .eq('clerk_user_id', data.clerkUserId)
-      .maybeSingle();
+    const userRows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM users WHERE clerk_user_id = ${data.clerkUserId} LIMIT 1`;
 
-    if (userError) {
-      throw new Error(`Failed to look up user by clerk_user_id: ${userError.message}`);
-    }
-
-    if (!userRow) {
+    if (userRows.length === 0) {
       console.warn(
         `[ClerkSyncRepository] createMembership: user with clerk_user_id="${data.clerkUserId}" not found; skipping membership insert (EC005)`,
       );
@@ -75,34 +56,19 @@ export class ClerkSyncRepository {
     }
 
     // Resolve local org UUID from clerk_org_id
-    const { data: orgRow, error: orgError } = await this.supabase
-      .from('organizations')
-      .select('id')
-      .eq('clerk_org_id', data.clerkOrgId)
-      .maybeSingle();
+    const orgRows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM organizations WHERE clerk_org_id = ${data.clerkOrgId} LIMIT 1`;
 
-    if (orgError) {
-      throw new Error(`Failed to look up organization by clerk_org_id: ${orgError.message}`);
-    }
-
-    if (!orgRow) {
+    if (orgRows.length === 0) {
       console.warn(
         `[ClerkSyncRepository] createMembership: organization with clerk_org_id="${data.clerkOrgId}" not found; skipping membership insert (EC005)`,
       );
       return;
     }
 
-    const { error } = await this.supabase.from('organization_members').upsert(
-      {
-        user_id: userRow.id,
-        org_id: orgRow.id,
-        role: data.role,
-      },
-      { onConflict: 'user_id,org_id', ignoreDuplicates: true },
-    );
-
-    if (error) {
-      throw new Error(`Failed to insert organization membership: ${error.message}`);
-    }
+    await this.sql`
+      INSERT INTO organization_members (user_id, org_id, role)
+      VALUES (${userRows[0].id}, ${orgRows[0].id}, ${data.role})
+      ON CONFLICT (user_id, org_id) DO NOTHING`;
   }
 }
