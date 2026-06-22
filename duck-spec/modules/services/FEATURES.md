@@ -55,3 +55,44 @@ Establecer la estructura base de la app Fastify con arquitectura hexagonal simpl
 ### Dependencias
 
 - INFRA-001 — la app `services` debe existir en el monorepo
+
+---
+
+## SERVICES-002 — Replace Supabase JS client with direct Postgres driver
+
+**Estado:** TODO
+
+### Contexto
+
+La app `services` usa `@supabase/supabase-js` como cliente de base de datos, el cual se comunica con Postgres a través de la API HTTP de PostgREST. Ninguna funcionalidad específica de Supabase (auth, realtime, storage, RLS) está siendo utilizada — el cliente solo actúa como query builder. Esto agrega una dependencia pesada y un salto HTTP innecesario por cada query.
+
+### Objetivo
+
+Eliminar `@supabase/supabase-js` como dependencia de runtime y reemplazar todas las queries con SQL directo usando `postgres.js`, conectando por TCP al mismo Postgres alojado en Supabase.
+
+### Requerimientos funcionales
+
+- Los endpoints de perfil de usuario (GET y PATCH) devuelven las mismas respuestas que antes
+- Los webhook handlers (`upsertUser`, `upsertOrganization`, `createMembership`) se comportan de forma idéntica al comportamiento actual
+- `createMembership` emite warnings diferenciados cuando el usuario o la organización no existen en la base de datos
+- La app arranca y falla de forma temprana si la variable de entorno de conexión a Postgres está ausente
+
+### Requerimientos no funcionales
+
+- La conexión a la base de datos debe realizarse por TCP directo (sin HTTP intermedio)
+- `@supabase/supabase-js` no debe ser una dependencia de runtime de `apps/services`
+
+### Fuera de scope
+
+- Cambios en interfaces, use cases, handlers o routes
+- Cambios de schema o migraciones
+- Nuevas queries o comportamientos
+- Otras apps del monorepo (`web`, `landing`)
+
+### Edge cases
+
+- `createMembership` realiza 3 round trips separados con warnings distintos para usuario no encontrado vs. organización no encontrada — este comportamiento debe preservarse exactamente
+
+### Technical constraints
+
+- Postgres client: `postgres.js`

@@ -27,6 +27,7 @@ Handler → UseCase → IRepository (implemented by) Repository
 
 ## Coding conventions
 
+**Use raw SQL for all database queries:** Use `postgres.js` tagged-template queries directly. Do not introduce ORMs, query builders, or other SQL abstraction libraries.
 **DONOT use concrete architecture names, use abstract names instead**: DONOT: UserSupabaseRepository, AuthSnsRepository, CreateClerkUserUseCase. DO: UserDBRepository, AuthEventRepository, CreateUserUseCase.
 **Apply Clean Code principles**
 **Apply SOLID principles**
