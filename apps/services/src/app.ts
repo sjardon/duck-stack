@@ -7,6 +7,7 @@ import helmetPlugin from './shared/plugins/helmet.js';
 import clerkAuthPlugin from './shared/plugins/clerk-auth.plugin.js';
 import healthRoutes from './modules/health/routes.js';
 import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
+import usersRoutes from './modules/users/routes.js';
 
 export async function createApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -25,6 +26,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await fastify.register(helmetPlugin);
   await fastify.register(clerkWebhookRoutes);
   await fastify.register(clerkAuthPlugin);
+  await fastify.register(usersRoutes);
   await fastify.register(healthRoutes);
 
   return fastify;

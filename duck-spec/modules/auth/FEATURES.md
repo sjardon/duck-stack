@@ -116,7 +116,7 @@ Establecer las tablas `users`, `organizations` y `organization_members` en Supab
 
 ## AUTH-003 — User Profile
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

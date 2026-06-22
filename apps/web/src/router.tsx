@@ -5,6 +5,7 @@ import SignInPage from "./pages/auth/SignInPage";
 import SignUpPage from "./pages/auth/SignUpPage";
 import CreateOrgPage from "./pages/org/CreateOrgPage";
 import OrgProfilePage from "./pages/org/OrgProfilePage";
+import ProfilePage from "./pages/profile/ProfilePage";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
       {
         path: "/org/profile",
         element: <OrgProfilePage />,
+      },
+      {
+        path: "/profile",
+        element: <ProfilePage />,
       },
       {
         path: "/*",

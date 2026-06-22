@@ -69,8 +69,10 @@ Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in tu
 |--------|------|---------|
 | `useCurrentUser` | `hooks/use-current-user.ts` | `UserResource \| null` — wraps Clerk's `useUser` |
 | `useCurrentOrg` | `hooks/use-current-org.ts` | `OrganizationResource \| null` — wraps Clerk's `useOrganization` |
+| `useUserProfile` | `hooks/use-user-profile.ts` | React Query `useQuery` result for `UserProfile`; key `['users', 'me']` |
+| `useUpdateProfile` | `hooks/use-user-profile.ts` | React Query `useMutation` for `PATCH /users/me`; invalidates `['users', 'me']` on success |
 
-Both return `null` when the resource is not loaded or not present. Components that need the current user or active organization import these hooks rather than calling Clerk hooks directly.
+`useCurrentUser` and `useCurrentOrg` return `null` when the resource is not loaded or not present. Components that need the current user or active organization import these hooks rather than calling Clerk hooks directly. `useUserProfile` and `useUpdateProfile` back the `/profile` page; they call `api/users.ts` which uses `apiFetch` with a bearer token from `useAuth().getToken()`.
 
 ### Organization pages
 
@@ -80,6 +82,14 @@ Both return `null` when the resource is not loaded or not present. Components th
 | `/org/profile` | `pages/org/OrgProfilePage.tsx` | Renders Clerk's `<OrganizationProfile />` (including invitation management) |
 
 Both routes are wrapped by `AuthGuard`.
+
+### Profile page
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/profile` | `pages/profile/ProfilePage.tsx` | Renders the authenticated user's profile and a form to edit `locale` and `timezone` |
+
+The page is wrapped by `AuthGuard`. It fetches data via `useUserProfile` on mount and submits changes via `useUpdateProfile`. Success and error states are surfaced as visible feedback without leaving the page. When `avatar_url` is `null`, a fallback avatar placeholder is rendered instead of a broken image.
 
 ### AppLayout
 
