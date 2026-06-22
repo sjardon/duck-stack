@@ -22,6 +22,7 @@ React Router handles all routing. The route table includes:
 | `/sign-up` | `SignUpPage` (`<SignUp />`) | public |
 | `/org/create` | `CreateOrgPage` (`<CreateOrganization />`) | `AuthGuard` |
 | `/org/profile` | `OrgProfilePage` (`<OrganizationProfile />`) | `AuthGuard` |
+| `/profile` | `ProfilePage` | `AuthGuard` |
 | `/*` (layout) | `AppLayout` + nested routes | `AuthGuard` |
 
 `AuthGuard` reads `useAuth().isSignedIn` from Clerk. While Clerk is loading it renders a loading state. When `isSignedIn` is false it redirects to `/sign-in`. When true it renders `<Outlet />`.
@@ -60,6 +61,25 @@ Clerk Organizations serve as the multi-tenancy primitive. The starter exposes `o
 
 `apps/landing` does not embed any Clerk components. It links to `/sign-in` and `/sign-up` on `apps/web` only.
 
+## User profile endpoints
+
+`apps/services` exposes two authenticated REST endpoints in `src/modules/users/`:
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/users/me` | `requireAuth` | Returns the authenticated user's profile: `name`, `email`, `avatar_url`, `locale`, `timezone`. Returns HTTP 404 (`NOT_FOUND`) when no `users` row matches the request's `clerk_user_id`. |
+| `PATCH` | `/users/me` | `requireAuth` | Accepts a strict body containing only `locale` and/or `timezone` (both nullable strings). Updates the matching row and returns the updated profile. An empty body is a no-op returning the current profile with HTTP 200. Unknown fields are rejected with HTTP 400 via Zod `.strict()` validation. |
+
+Both endpoints return `{ data: UserProfile }` on success. `UserProfile` is the shared interface exported from `@repo/types`, consumed by both `apps/services` and `apps/web`.
+
+The `users` module follows the same hexagonal slice pattern as other feature modules: route plugin → handler → use-case → repository interface (`IUserRepository`) + Supabase implementation (`UserDBRepository`). The repository performs a single indexed lookup on `clerk_user_id` (unique column) with no joins, satisfying the sub-200 ms response time target.
+
+## Profile page — `apps/web`
+
+`pages/profile/ProfilePage.tsx` is rendered at `/profile` behind `AuthGuard`. On mount it fetches the current user's profile via `useUserProfile()`, a React Query `useQuery` hook backed by `api/users.ts → fetchUserProfile`. The page renders `name`, `email`, avatar (with a fallback placeholder when `avatar_url` is `null`), `locale`, and `timezone`.
+
+A controlled form allows the user to edit `locale` and `timezone`. Submission dispatches `useUpdateProfile()`, a React Query `useMutation` backed by `patchUserProfile`. On success the cache is invalidated and a visible success indicator is shown. On error a visible error indicator is shown without mutating the displayed values.
+
 ## Supabase schema
 
 Three tables constitute the identity persistence layer in Supabase:
@@ -69,6 +89,8 @@ Three tables constitute the identity persistence layer in Supabase:
 | `users` | `id` (uuid) | `clerk_user_id` | Local mirror of Clerk user records |
 | `organizations` | `id` (uuid) | `clerk_org_id`, `slug` | Local mirror of Clerk organization records |
 | `organization_members` | `(user_id, org_id)` composite | — | Membership join table with `role` |
+
+The `users` table additionally carries `locale` (TEXT, nullable) and `timezone` (TEXT, nullable) columns added by migration `20260622000000_users_locale_timezone.sql`. Both columns default to `null`; they are the product-owned preferences editable via the profile endpoints.
 
 `updated_at` on `users` and `organizations` is maintained automatically by a database trigger. `organization_members` has no `updated_at` column.
 
