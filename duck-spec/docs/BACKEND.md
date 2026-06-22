@@ -13,7 +13,7 @@ Living document describing backend conventions, patterns, and stack decisions fo
 | Language | TypeScript (strict mode via `@repo/tsconfig`) |
 | Module system | ESM (`NodeNext`) |
 | Logger | Pino (Fastify built-in) + `pino-pretty` in development |
-| Database client | `@supabase/supabase-js` (singleton) |
+| Database client | `postgres.js` (singleton, direct TCP) |
 | Security headers | `@fastify/helmet` |
 | CORS | `@fastify/cors` |
 | Dev runner | `tsx watch` |
@@ -28,7 +28,7 @@ Living document describing backend conventions, patterns, and stack decisions fo
 | `src/app.ts` | `createApp()` — instantiates Fastify, registers shared plugins and feature modules. Does not call `listen`. |
 | `src/server.ts` | Calls `createApp()`, reads `HOST`/`PORT`, calls `fastify.listen()`, handles `SIGINT`/`SIGTERM`. |
 
-Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastify plugin registered in `app.ts`. Shared infrastructure (logger, Supabase client) lives under `src/shared/infrastructure/`. Reusable plugins under `src/shared/plugins/`.
+Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastify plugin registered in `app.ts`. Shared infrastructure (logger, postgres.js database client) lives under `src/shared/infrastructure/`. Reusable plugins under `src/shared/plugins/`.
 
 ## Logging strategy
 
@@ -86,9 +86,9 @@ Two reusable preHandler functions live in `src/shared/plugins/`:
 
 Neither preHandler is registered globally. Routes opt in by listing the relevant function in their `preHandler` array. Organization-scoped enforcement is a per-route decision — the starter does not impose it globally.
 
-## Supabase client
+## Database client
 
-`shared/infrastructure/supabase.ts` exports a singleton created from `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Throws at startup if either is absent. Repositories import this singleton directly.
+`shared/infrastructure/db.ts` exports a `postgres.js` `Sql` singleton created from `DATABASE_URL`. Throws a descriptive error synchronously at module load time if `DATABASE_URL` is absent or empty, preventing the server from starting. Repositories import this singleton directly and execute all queries as tagged-template SQL calls over a direct TCP connection to Postgres. `@supabase/supabase-js` is not a runtime dependency of `apps/services`.
 
 ## Webhook modules
 

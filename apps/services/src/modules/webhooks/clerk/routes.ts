@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { verifyWebhook } from '@clerk/backend/webhooks';
-import { supabase } from '../../../shared/infrastructure/supabase.js';
+import { db } from '../../../shared/infrastructure/db.js';
 import { ClerkSyncRepository } from './repository.js';
 import { dispatchClerkEvent } from './handlers.js';
 
@@ -15,7 +15,7 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
     );
   }
 
-  const repository = new ClerkSyncRepository(supabase);
+  const repository = new ClerkSyncRepository(db);
 
   // Capture raw body as Buffer so Svix signature verification succeeds (NF001).
   // This content-type parser is scoped to this plugin only.

@@ -27,7 +27,7 @@ apps/services/
         helmet.ts                       # Helmet security-headers plugin
       infrastructure/
         logger.ts                       # Standalone Pino logger instance
-        supabase.ts                     # Supabase singleton client
+        db.ts                           # postgres.js singleton client
     modules/
       health/
         routes.ts                       # Health-check route plugin
@@ -59,9 +59,11 @@ The error-handler plugin (`shared/plugins/error-handler.ts`) uses `fastify.setEr
 
 Both plugins are registered in `app.ts`.
 
-### Supabase client
+### Postgres client (SERVICES-002)
 
-`shared/infrastructure/supabase.ts` exports a singleton `SupabaseClient` created once at module load time from `SUPABASE_URL` and `SUPABASE_ANON_KEY`. If either variable is absent the module throws at startup. Infrastructure code (repositories) imports this singleton directly.
+`shared/infrastructure/db.ts` exports a singleton `Sql` instance created from `DATABASE_URL` using `postgres.js`. If `DATABASE_URL` is absent or empty the module throws a descriptive error synchronously at startup, preventing the Fastify server from binding. Infrastructure code (repositories) imports this singleton directly. `@supabase/supabase-js` is no longer a runtime dependency of `apps/services`; all database operations run as direct TCP queries with no HTTP intermediary.
+
+`UserDBRepository` and `ClerkSyncRepository` accept a `postgres.js` `Sql` instance via constructor injection and execute all queries as tagged-template SQL calls. All observable HTTP response shapes, side effects, and warning behaviors are preserved from the previous Supabase-backed implementation. `createMembership` performs three sequential queries — user lookup, organization lookup, and membership insert — emitting distinct warning logs when the user or organization row is not found, without throwing.
 
 ### Health module
 

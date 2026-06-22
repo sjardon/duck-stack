@@ -1,32 +1,29 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Sql } from 'postgres';
 import type { UserProfile } from '@repo/types';
 import type { IUserRepository } from './interfaces/IUserRepository.js';
-import type { UserEntity } from '../entities/user.entity.js';
 
 export class UserDBRepository implements IUserRepository {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(private readonly sql: Sql) {}
 
   async findByClerkUserId(clerkUserId: string): Promise<UserProfile | null> {
-    const { data, error } = await this.supabase
-      .from('users')
-      .select('name, email, avatar_url, locale, timezone')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle<Pick<UserEntity, 'name' | 'email' | 'avatar_url' | 'locale' | 'timezone'>>();
+    const rows = await this.sql<
+      Array<{ name: string; email: string; avatar_url: string | null; locale: string | null; timezone: string | null }>
+    >`SELECT name, email, avatar_url, locale, timezone
+      FROM users
+      WHERE clerk_user_id = ${clerkUserId}
+      LIMIT 1`;
 
-    if (error) {
-      throw new Error(`Failed to fetch user profile: ${error.message}`);
-    }
-
-    if (!data) {
+    if (rows.length === 0) {
       return null;
     }
 
+    const row = rows[0];
     return {
-      name: data.name,
-      email: data.email,
-      avatar_url: data.avatar_url,
-      locale: data.locale,
-      timezone: data.timezone,
+      name: row.name,
+      email: row.email,
+      avatar_url: row.avatar_url,
+      locale: row.locale,
+      timezone: row.timezone,
     };
   }
 
@@ -35,26 +32,31 @@ export class UserDBRepository implements IUserRepository {
     patch: { locale?: string | null; timezone?: string | null },
   ): Promise<UserProfile> {
     const updates: Record<string, string | null> = {};
-    if ('locale' in patch) updates['locale'] = patch.locale ?? null;
-    if ('timezone' in patch) updates['timezone'] = patch.timezone ?? null;
+    const columns: string[] = [];
 
-    const { data, error } = await this.supabase
-      .from('users')
-      .update(updates)
-      .eq('clerk_user_id', clerkUserId)
-      .select('name, email, avatar_url, locale, timezone')
-      .single<Pick<UserEntity, 'name' | 'email' | 'avatar_url' | 'locale' | 'timezone'>>();
-
-    if (error) {
-      throw new Error(`Failed to update user preferences: ${error.message}`);
+    if ('locale' in patch) {
+      updates['locale'] = patch.locale ?? null;
+      columns.push('locale');
+    }
+    if ('timezone' in patch) {
+      updates['timezone'] = patch.timezone ?? null;
+      columns.push('timezone');
     }
 
+    const rows = await this.sql<
+      Array<{ name: string; email: string; avatar_url: string | null; locale: string | null; timezone: string | null }>
+    >`UPDATE users
+      SET ${this.sql(updates, columns)}
+      WHERE clerk_user_id = ${clerkUserId}
+      RETURNING name, email, avatar_url, locale, timezone`;
+
+    const row = rows[0];
     return {
-      name: data.name,
-      email: data.email,
-      avatar_url: data.avatar_url,
-      locale: data.locale,
-      timezone: data.timezone,
+      name: row.name,
+      email: row.email,
+      avatar_url: row.avatar_url,
+      locale: row.locale,
+      timezone: row.timezone,
     };
   }
 }

@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
-import { supabase } from '../../../shared/infrastructure/supabase.js';
+import { db } from '../../../shared/infrastructure/db.js';
 import { UserDBRepository } from '../repositories/UserDBRepository.js';
 import { UpdateUserProfileUseCase } from '../useCases/UpdateUserProfileUseCase.js';
 import { UpdateProfileBody } from '../dtos/updateProfile.dto.js';
@@ -19,7 +19,7 @@ export async function updateUserProfileHandler(
     throw err;
   }
 
-  const repo = new UserDBRepository(supabase);
+  const repo = new UserDBRepository(db);
   const useCase = new UpdateUserProfileUseCase(repo);
 
   const profile = await useCase.execute(request.userId!, body);

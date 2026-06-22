@@ -33,7 +33,7 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | Integration | Service | Role |
 |-------------|---------|------|
 | Clerk | `apps/web`, `apps/services` | End-to-end identity provider. `apps/web` manages user sessions via `@clerk/clerk-react`. `apps/services` verifies Clerk JWTs locally via `@clerk/backend` (JWKS cached at startup; no per-request Clerk API call). Clerk also delivers lifecycle events (user and organization create/update) to `apps/services` via webhook. |
-| Supabase | `apps/services` | Relational database. `apps/services` connects via `@supabase/supabase-js` using `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Schema migrations are managed with the Supabase CLI under `apps/services/supabase/migrations/`. |
+| Supabase | `apps/services` | Relational database. `apps/services` connects via `postgres.js` over a direct TCP connection using `DATABASE_URL`. Schema migrations are managed with the Supabase CLI under `apps/services/supabase/migrations/`. |
 
 ## Inter-service communication
 
