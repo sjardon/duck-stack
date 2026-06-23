@@ -1,5 +1,6 @@
 import type { PaymentProvider } from '@repo/types';
 import { MobbexProvider } from './mobbexProvider.js';
+import { mobbexConfig } from '../../../shared/configs/mobbexConfig.js';
 
 // Singleton — set once at first call; runtime env changes are ignored (EC004)
 let cachedProvider: PaymentProvider | undefined;
@@ -9,7 +10,7 @@ export function resolveProvider(): PaymentProvider {
     return cachedProvider;
   }
 
-  const providerName = process.env['BILLING_PROVIDER'] ?? 'mobbex';
+  const providerName = mobbexConfig.billingProvider;
 
   if (providerName === 'mobbex') {
     cachedProvider = createMobbexProvider();
@@ -22,8 +23,8 @@ export function resolveProvider(): PaymentProvider {
 }
 
 function createMobbexProvider(): MobbexProvider {
-  const apiKey = process.env['MOBBEX_API_KEY'] ?? '';
-  const accessToken = process.env['MOBBEX_ACCESS_TOKEN'] ?? '';
+  const apiKey = mobbexConfig.apiKey;
+  const accessToken = mobbexConfig.accessToken;
 
   if (!apiKey || !accessToken) {
     throw new Error(
@@ -31,13 +32,9 @@ function createMobbexProvider(): MobbexProvider {
     );
   }
 
-  const testMode =
-    process.env['MOBBEX_TEST_MODE'] === 'true' ||
-    process.env['MOBBEX_TEST_MODE'] === '1';
-
-  const timeoutMs = parseInt(process.env['MOBBEX_TIMEOUT_MS'] ?? '10000', 10);
-
-  const webhookSecret = process.env['MOBBEX_WEBHOOK_SECRET'] ?? '';
+  const testMode = mobbexConfig.testMode;
+  const timeoutMs = mobbexConfig.timeoutMs;
+  const webhookSecret = mobbexConfig.webhookSecret;
 
   return new MobbexProvider({
     apiKey,

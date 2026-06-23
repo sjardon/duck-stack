@@ -1,9 +1,10 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { verifyToken } from '@clerk/backend';
+import { authConfig } from '../configs/authConfig.js';
 
 export default fp(async function clerkAuthPlugin(fastify: FastifyInstance) {
-  const jwtKey = process.env.CLERK_JWT_KEY;
+  const jwtKey = authConfig.clerkJwtKey;
   const secretKey = process.env.CLERK_SECRET_KEY;
 
   if (!secretKey) {

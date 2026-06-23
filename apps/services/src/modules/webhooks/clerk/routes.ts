@@ -4,9 +4,10 @@ import { verifyWebhook } from '@clerk/backend/webhooks';
 import { db } from '../../../shared/infrastructure/db.js';
 import { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
 import { dispatchClerkEvent } from './clerkEventHandlers.js';
+import { authConfig } from '../../../shared/configs/authConfig.js';
 
 export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
-  const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+  const signingSecret = authConfig.clerkWebhookSigningSecret;
 
   if (!signingSecret) {
     throw new Error(
