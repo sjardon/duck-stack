@@ -98,7 +98,7 @@ Using the template in `tasks.template.md`, create one task per atomic, function-
 - `covers`: list of R-IDs and NF-IDs this task satisfies
 
 **ATDD ordering rule:** for each R-ID, generate tasks in this sequence:
-1. `test` task — write the acceptance test for the R-ID (test file in `tests/` of the relevant app)
+1. `test` task — write the acceptance test for the R-ID (test file in `tests/` of the relevant app, following the same project structure as the code being tested)
 2. `implement` task — implement the production code
 3. `refactor` task (optional) — only when the design calls for a non-trivial cleanup step
 
