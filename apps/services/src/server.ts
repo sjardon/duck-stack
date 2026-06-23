@@ -1,10 +1,11 @@
 import { createApp } from './app.js';
+import { serverConfig } from './shared/configs/serverConfig.js';
 
 async function main() {
   const fastify = await createApp();
 
-  const host = process.env.HOST ?? '0.0.0.0';
-  const port = Number(process.env.PORT ?? 3000);
+  const host = serverConfig.host;
+  const port = serverConfig.port;
 
   await fastify.listen({ host, port });
 

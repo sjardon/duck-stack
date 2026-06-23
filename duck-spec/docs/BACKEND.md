@@ -183,7 +183,16 @@ Unit tests live under `apps/services/tests/unit/` using Jest. Interface mocks li
 
 **No `process.env` reads outside config files.** Application code must import a typed config object instead of reading environment variables directly. This isolates env-var coupling to a single layer and makes config defaults discoverable.
 
-**Config files live in `src/shared/configs/<scope>Config.ts`.** One file per logical scope (`serviceConfig`, `billingConfig`, `authConfig`, …). Use this shape:
+**Config files live in `src/shared/configs/<scope>Config.ts`.** One file per logical scope. Established scopes:
+
+| File | Variables covered |
+|------|-------------------|
+| `serverConfig.ts` | `NODE_ENV`, `LOG_LEVEL`, `HOST`, `PORT`, `CORS_ORIGIN` |
+| `authConfig.ts` | `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` |
+| `mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
+| `dbConfig.ts` | (database connection — see Database client section) |
+
+Use this shape:
 
 ```ts
 const env = process.env || {};

@@ -12,6 +12,7 @@ import usersRoutes from './modules/users/routes.js';
 import billingRoutes from './modules/billing/routes.js';
 import subscriptionsRoutes from './modules/subscriptions/routes.js';
 import { resolveProvider } from './modules/billing/providers/resolveProvider.js';
+import { serverConfig } from './shared/configs/serverConfig.js';
 
 export async function createApp(): Promise<FastifyInstance> {
   // Fail fast on misconfigured payment provider before the HTTP server starts
@@ -19,9 +20,9 @@ export async function createApp(): Promise<FastifyInstance> {
 
   const fastify = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL ?? 'info',
+      level: serverConfig.logLevel,
       transport:
-        process.env.NODE_ENV !== 'production'
+        serverConfig.nodeEnv !== 'production'
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
     },

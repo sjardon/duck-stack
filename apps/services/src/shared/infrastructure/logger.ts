@@ -1,9 +1,10 @@
 import pino from 'pino';
+import { serverConfig } from '../configs/serverConfig.js';
 
 export const logger = pino({
-  level: process.env.LOG_LEVEL ?? 'info',
+  level: serverConfig.logLevel,
   transport:
-    process.env.NODE_ENV !== 'production'
+    serverConfig.nodeEnv !== 'production'
       ? { target: 'pino-pretty', options: { colorize: true } }
       : undefined,
 });

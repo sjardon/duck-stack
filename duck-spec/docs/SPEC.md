@@ -36,9 +36,9 @@ See `duck-spec/modules/landing/SPEC.md` for full details.
 
 ## services
 
-**Status:** Fastify base structure in place; postgres.js direct database client in use.
+**Status:** Fastify base structure in place; postgres.js direct database client in use; environment configuration centralized under typed config objects.
 
-`apps/services` exposes a `GET /health` endpoint and implements a simplified hexagonal architecture with vertical slicing. Shared infrastructure (logger, postgres.js client, error handler, CORS, helmet) is wired once in `src/app.ts`; feature modules register routes as Fastify plugins. All database operations run via a `postgres.js` singleton (`shared/infrastructure/db.ts`) connected to Postgres over TCP — no HTTP intermediary. `@supabase/supabase-js` is not a runtime dependency.
+`apps/services` exposes a `GET /health` endpoint and implements a simplified hexagonal architecture with vertical slicing. Shared infrastructure (logger, postgres.js client, error handler, CORS, helmet) is wired once in `src/app.ts`; feature modules register routes as Fastify plugins. All database operations run via a `postgres.js` singleton (`shared/infrastructure/db.ts`) connected to Postgres over TCP — no HTTP intermediary. `@supabase/supabase-js` is not a runtime dependency. All environment variables are consumed through typed configuration objects under `src/shared/configs/` (`serverConfig.ts`, `authConfig.ts`, `mobbexConfig.ts`); no application code reads `process.env` directly except the two documented bootstrap exceptions (`db.ts` for `DATABASE_URL` and `clerkAuthPlugin` for `CLERK_SECRET_KEY`).
 
 See `duck-spec/modules/services/SPEC.md` for full details.
 

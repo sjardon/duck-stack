@@ -59,6 +59,20 @@ The error-handler plugin (`shared/plugins/error-handler.ts`) uses `fastify.setEr
 
 Both plugins are registered in `app.ts`.
 
+### Centralized environment configuration (SERVICES-003)
+
+All `process.env` reads in application code are eliminated in favor of typed configuration objects under `src/shared/configs/`. Three config files cover all environment variables consumed by the app:
+
+| File | Variables |
+|------|-----------|
+| `src/shared/configs/serverConfig.ts` | `NODE_ENV`, `LOG_LEVEL`, `HOST`, `PORT`, `CORS_ORIGIN` |
+| `src/shared/configs/authConfig.ts` | `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` |
+| `src/shared/configs/mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
+
+`app.ts`, `server.ts`, `shared/plugins/cors.ts`, `shared/infrastructure/logger.ts`, `shared/plugins/clerk-auth.plugin.ts`, `modules/webhooks/clerk/routes.ts`, and `modules/billing/providers/resolveProvider.ts` all import from these config objects instead of reading `process.env` directly.
+
+Two documented exceptions are preserved and not migrated: `shared/infrastructure/db.ts` reads `DATABASE_URL` directly, and `shared/plugins/clerk-auth.plugin.ts` reads `CLERK_SECRET_KEY` directly. All defaults, fail-fast error messages, and startup error timing are identical to the pre-centralization state. `MOBBEX_TEST_MODE` accepts both the string `"true"` and `"1"` as enabled.
+
 ### Postgres client (SERVICES-002)
 
 `shared/infrastructure/db.ts` exports a singleton `Sql` instance created from `DATABASE_URL` using `postgres.js`. If `DATABASE_URL` is absent or empty the module throws a descriptive error synchronously at startup, preventing the Fastify server from binding. Infrastructure code (repositories) imports this singleton directly. `@supabase/supabase-js` is no longer a runtime dependency of `apps/services`; all database operations run as direct TCP queries with no HTTP intermediary.
