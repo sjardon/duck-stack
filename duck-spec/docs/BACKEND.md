@@ -30,6 +30,18 @@ Living document describing backend conventions, patterns, and stack decisions fo
 
 Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastify plugin registered in `app.ts`. Shared infrastructure (logger, postgres.js database client) lives under `src/shared/infrastructure/`. Reusable plugins under `src/shared/plugins/`.
 
+## Coding conventions
+
+SOLID and Clean Code principles are hard expectations for every module — they govern design decisions, not just implementation polish.
+
+**File naming.** Use camelCase starting with lowercase. DO: `completeOnboardingUseCase.ts`, `getUserProfileUseCase.ts`. DO NOT: `completeOnboarding.use-case.ts`, `GetUserProfileUseCase.ts`.
+
+**Abstract names over concrete architecture names.** Names must describe the role, not the implementation technology.
+- DO NOT: `UserSupabaseRepository`, `AuthSnsRepository`, `CreateClerkUserUseCase`.
+- DO: `UserDBRepository`, `AuthEventRepository`, `CreateUserUseCase`.
+
+This rule lets the underlying provider change without a rename cascade and keeps use cases dependent on roles, not vendors.
+
 ## Logging strategy
 
 | Context | Instance | Format |
@@ -38,6 +50,15 @@ Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastif
 | Non-request code | `shared/infrastructure/logger.ts` standalone pino | Same level and transport |
 
 Every request gets a UUID via `genReqId`. `LOG_LEVEL` env var controls level (default `info`).
+
+### Operational rules
+
+- Use the logger from `src/shared/infrastructure/logger.ts` outside the request scope; inside a request use the Fastify-bound logger so the `requestId` is included automatically.
+- Structured logging only. Stable field names: `timestamp`, `level`, `message`, `requestId`, `userId`, `duration`.
+- Log: request in / response out at the boundary; external calls (DB, HTTP, queue) with their latency; business-significant state transitions; every error with its stack.
+- Do NOT log: secrets, tokens, passwords, PII (GDPR/compliance); high-frequency trivial events inside tight loops; data already present in the request context.
+- Include the IDs that make the entry reconstructable across services — e.g. `"Payment failed" { userId, orderId, reason }`.
+- Use past tense for completed events (`"User created"`, `"Webhook processed"`).
 
 ## Domain error model
 
@@ -93,6 +114,19 @@ Neither preHandler is registered globally. Routes opt in by listing the relevant
 
 `shared/infrastructure/db.ts` exports a `postgres.js` `Sql` singleton created from `DATABASE_URL`. Throws a descriptive error synchronously at module load time if `DATABASE_URL` is absent or empty, preventing the server from starting. Repositories import this singleton directly and execute all queries as tagged-template SQL calls over a direct TCP connection to Postgres. `@supabase/supabase-js` is not a runtime dependency of `apps/services`.
 
+### Query rules
+
+- **Raw SQL only.** Use `postgres.js` tagged-template queries directly. No ORMs, query builders, or other SQL abstraction libraries.
+- **Always parameterized.** Use tagged template literals — never interpolate values directly into SQL strings (SQL injection).
+- **No `SELECT *`.** Select only the columns the caller needs to reduce payload and avoid schema drift leaking unexpected fields.
+- **Validate before querying.** Sanitize and validate all external input at the boundary (Zod DTOs) before it reaches a query.
+- **Multi-step writes in transactions.** Any sequence of writes that must succeed or fail together must use `sql.begin(async (tx) => { ... })`.
+- **Queries only in repositories.** No raw SQL in use cases, handlers, dispatchers, or routes — only in repository files.
+- **Always paginate unbounded queries.** Apply cursor-based pagination (see below) or `LIMIT` to any query that may return more than a single row.
+- **Log query latency.** Track duration at the repository layer for every external DB call.
+- **Enforce constraints at the DB level.** Use `NOT NULL`, `UNIQUE`, `CHECK`, and `FK` constraints — do not rely solely on app-level validation.
+- **Migrations are separate.** Schema changes belong in versioned migration files, never in application startup code.
+
 ## Feature module structure
 
 Feature modules follow a **handler → useCase → IRepository → DBRepository** vertical slice. Each concern lives in its own file; no business logic is placed directly in route handlers.
@@ -108,6 +142,14 @@ Feature modules follow a **handler → useCase → IRepository → DBRepository*
 | `routes.ts` | Fastify plugin that registers all routes for the module with their `preHandler` arrays |
 
 This pattern is established by the `billing` module (BILLING-002) and mirrors the `users` module structure. New feature modules must follow the same layout.
+
+### Layer rules
+
+- **One handler per feature.** Handlers only instantiate repositories and inject them into the use case. No business logic. Create the use case at module scope (outside the handler function), in the same file.
+- **One use case per feature.** Use cases contain pure business logic with no framework or concrete service dependencies. They only consume repositories — **a use case never consumes another use case** under any circumstance.
+- **One repository per entity per data source.** `usersRepository.ts`, `usersCacheRepository.ts`, `usersEventsRepository.ts` are separate repositories because they target different data sources for the same entity. Mixing two entities in one repository (e.g. transactions + refunds) is a SRP violation — split them.
+- **Shared repositories live in `src/shared/repositories/`** when two or more modules depend on the same repository.
+- **Use cases depend on interfaces, never on implementations.** Handlers do the wiring (`new FooDBRepository(db)`) and pass the instance to the use case constructor typed as `IFooRepository`.
 
 ### Repository interface pattern
 
@@ -128,6 +170,36 @@ Webhook endpoints are feature modules, not shared plugins. Each provider's webho
 **Fail-fast secret check.** Each webhook plugin reads its signing secret from `process.env` at registration time and throws `Error` immediately if the variable is absent. This prevents the route from ever being served without signature verification.
 
 **Repository pattern.** All database calls within a webhook module are centralized in a `<Provider>SyncRepository` class. Handler functions receive a repository instance via constructor injection and call typed methods (`upsertUser`, `upsertOrganization`, `createMembership`, etc.). This keeps SQL logic testable in isolation and out of handler/dispatcher code.
+
+**Atomic multi-step repository operations.** When a single business action requires multiple writes that must be observed atomically (e.g., upserting a child record and conditionally updating a parent record's status), the repository method wraps all writes in a `sql.begin(async (tx) => { ... })` block provided by `postgres.js`. The method returns a typed result struct (outcome + resolved IDs) so the caller never needs to re-query. Dispatchers and use cases receive only the outcome value — no SQL or transaction coordination logic leaks outside the repository implementation.
+
+## Tests
+
+Unit tests live under `apps/services/tests/unit/` using Jest. Interface mocks live in `apps/services/tests/mocks/`.
+
+**Test paths mirror the file under test.** A file at `src/modules/billing/providers/mobbexProvider.ts` is tested at `tests/unit/modules/billing/providers/mobbexProvider.test.ts`. This mirroring is mandatory — it makes test ownership and coverage gaps trivially auditable.
+
+## Configuration
+
+**No `process.env` reads outside config files.** Application code must import a typed config object instead of reading environment variables directly. This isolates env-var coupling to a single layer and makes config defaults discoverable.
+
+**Config files live in `src/shared/configs/<scope>Config.ts`.** One file per logical scope (`serviceConfig`, `billingConfig`, `authConfig`, …). Use this shape:
+
+```ts
+const env = process.env || {};
+
+export const serviceConfig = {
+    env: env.NODE_ENV,
+    shortEnv: env.SHORT_ENV,
+    selfUrl: env.SELF_URL || 'https://url.example.com/api'
+};
+```
+
+The only places allowed to read `process.env` directly are these config files and the small number of bootstrap files documented elsewhere in this doc (e.g. `shared/infrastructure/db.ts` for `DATABASE_URL`, `clerkAuthPlugin` for `CLERK_SECRET_KEY`). Any new env-var dependency must go through a config file.
+
+## Comments
+
+Keep comments small. Add a comment when it explains the domain reasoning or a non-obvious technical decision (a hidden constraint, a workaround for a specific provider quirk, an invariant that would surprise a reader). Do not narrate what the code does — well-named identifiers cover that.
 
 ## Scripts
 

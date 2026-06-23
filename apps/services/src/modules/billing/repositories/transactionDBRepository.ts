@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
 import type { TransactionEntity } from '../entities/transaction.entity.js';
+import type { RefundEntity } from '../entities/refund.entity.js';
 import type {
   ITransactionRepository,
   CreateTransactionData,
@@ -203,5 +204,18 @@ export class TransactionDBRepository implements ITransactionRepository {
     }
 
     return { rows: allRows, nextCursor };
+  }
+
+  async getRefundsByTransactionId(transactionId: string): Promise<RefundEntity[]> {
+    const start = Date.now();
+    const rows = await this.sql<RefundEntity[]>`
+      SELECT id, transaction_id, amount, reason, status, provider_refund_id, created_at, updated_at
+      FROM refunds
+      WHERE transaction_id = ${transactionId}
+      ORDER BY created_at ASC
+    `;
+    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.getRefundsByTransactionId');
+
+    return rows;
   }
 }

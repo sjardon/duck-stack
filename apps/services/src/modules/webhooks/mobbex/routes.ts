@@ -53,13 +53,21 @@ export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
         (payload['event_type'] as string | undefined) ??
         '';
       const providerTransactionId = (data['id'] as string | undefined) ?? null;
+      const providerRefundId = (data['refund_id'] as string | undefined) ?? null;
+      const refundAmount = (data['amount'] as number | undefined) ?? null;
 
-      // Dispatch to handlers (R007-R011, EC001-EC005)
+      // Dispatch to handlers (R002, R003, R007-R011, EC001-EC006)
       const outcome = await dispatchMobbexEvent(payload, repository);
 
       // Structured log (NF002, NF003) — no secret, no full payload, no PII
       request.log.info(
-        { event_type: eventType, provider_transaction_id: providerTransactionId, outcome },
+        {
+          event_type: eventType,
+          provider_transaction_id: providerTransactionId,
+          provider_refund_id: providerRefundId,
+          amount: refundAmount,
+          outcome,
+        },
         'mobbex webhook processed',
       );
 

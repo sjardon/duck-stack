@@ -108,4 +108,49 @@ The dispatcher locates the matching local transaction by `provider_transaction_i
 
 ### Structured logging
 
-The handler emits one structured log entry per processed event containing `event_type`, `provider_transaction_id`, and `outcome` (`approved` | `failed` | `noop` | `unresolved`). Secrets, full headers, and payload PII are never logged.
+The handler emits one structured log entry per processed event containing `event_type`, `provider_transaction_id`, and `outcome` (`approved` | `failed` | `noop` | `unresolved`). Secrets, full headers, and payload PII are never logged. For refund events the log entry also includes `provider_refund_id` and `amount`.
+
+---
+
+## Refunds reflection (BILLING-004)
+
+The `refunds` Supabase table persists every refund event reported by the provider. Columns: `id` (uuid PK), `transaction_id` (uuid FK → `transactions.id` ON DELETE CASCADE), `amount` (numeric), `reason` (text nullable), `status` (text constrained to `pending` | `approved` | `failed`), `provider_refund_id` (text, UNIQUE), `created_at` (timestamptz), `updated_at` (timestamptz). An index on `transaction_id` supports efficient reads. An `updated_at` trigger keeps the column current on every row update.
+
+### Webhook dispatch — refund events
+
+`dispatchMobbexEvent` recognizes two additional event type sets: `refund.success` (maps to `refundStatus = 'approved'`) and `refund.failure` (maps to `refundStatus = 'failed'`). Both paths share the same dispatcher entry point established by BILLING-003, so every refund event is also recorded in `billing_webhook_events` under the same audit path as checkout events.
+
+Before calling the repository, the dispatcher validates that the payload carries a non-empty `provider_refund_id` and a positive numeric `amount`. When either field is missing or invalid the event is recorded in `billing_webhook_events` with `transaction_id = NULL`, a warning is logged, and the endpoint returns HTTP 200 without creating a `refunds` row.
+
+### Atomic refund upsert and transaction status transition
+
+`MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded` executes all writes inside a single `sql.begin` block:
+
+1. Resolves the parent transaction by `provider_transaction_id`. If not found, returns `{ outcome: 'unresolved', transactionId: null }` without inserting a refund row; the dispatcher records the event with `transaction_id = NULL`.
+2. If the parent transaction has `status = 'pending'` (anomalous case), logs a warning carrying `transaction_id`, `provider_refund_id`, and current status, then continues to persist the refund row without modifying `transactions.status`.
+3. Upserts the `refunds` row by `provider_refund_id` (`ON CONFLICT (provider_refund_id) DO UPDATE`), ensuring idempotent re-delivery produces no duplicate row.
+4. For `refundStatus = 'approved'`: sums `amount` across all `status = 'approved'` rows for the parent transaction. If the total equals `transactions.amount` and the transaction is not already `refunded`, updates `transactions.status = 'refunded'` within the same block and returns `{ outcome: 'transaction_refunded', transactionId }`. Otherwise returns `{ outcome: 'refund_approved', transactionId }`.
+5. For `refundStatus = 'failed'`: returns `{ outcome: 'refund_failed', transactionId }` without modifying `transactions.status`.
+
+The outcome values (`refund_approved`, `refund_failed`, `transaction_refunded`, `unresolved`, `noop`) extend the existing set used by BILLING-003 checkout events and are included in the structured log entry.
+
+### Idempotency and edge cases
+
+| Scenario | Outcome |
+|----------|---------|
+| `provider_transaction_id` not found locally | No `refunds` row created; event recorded with `transaction_id = NULL`; warning logged; HTTP 200 |
+| Same refund event delivered more than once | Upsert by `provider_refund_id` is a no-op on conflict; cumulative sum is recomputed; `transactions.status` unchanged if already `refunded`; HTTP 200 |
+| Partial refunds accumulate to full amount only on the last event | `transactions.status` is set to `refunded` exclusively on the event where the cumulative approved total equals `transactions.amount` |
+| `refund.failure` event received | Refund row persisted with `status = 'failed'`; its `amount` is excluded from the cumulative approved sum; `transactions.status` unchanged |
+| Refund event for a `pending` transaction | Refund row persisted; warning logged; `transactions.status` not modified |
+| Payload missing `amount` or `provider_refund_id` | Event recorded in audit table; `refunds` row skipped; warning logged; HTTP 200 |
+
+### Read endpoint
+
+`GET /billing/transactions/:id/refunds` is registered in `billingRoutes` with `preHandler: requireAuth`. The `GetRefundsUseCase` verifies that the transaction exists (404 if not, using `NotFoundError`) and that it belongs to the authenticated requester — same ownership check as `GetTransactionUseCase` (403 if scope mismatch, using `ForbiddenError`). It then returns the list of refunds ordered by `created_at ASC` via `ITransactionRepository.getRefundsByTransactionId`. When no refunds exist the endpoint returns HTTP 200 with an empty array.
+
+All SQL for refund reads lives in `TransactionDBRepository.getRefundsByTransactionId`. All SQL for refund writes and the atomic transaction status transition lives in `MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded`. No SQL appears in handlers, use cases, dispatchers, or routes.
+
+### Shared types
+
+`@repo/types` exports `RefundStatusValue` (`'pending' | 'approved' | 'failed'`) and `Refund` (plain TypeScript interface mirroring the `refunds` table columns). A local `RefundEntity` interface in `apps/services/src/modules/billing/entities/refund.entity.ts` mirrors the same shape for internal use.

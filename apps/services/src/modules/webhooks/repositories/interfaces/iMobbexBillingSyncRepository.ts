@@ -18,7 +18,28 @@ export interface UpdateTransactionStatusResult {
   transactionId: string | null;
 }
 
+export type RefundOutcome =
+  | 'refund_approved'
+  | 'refund_failed'
+  | 'transaction_refunded'
+  | 'unresolved'
+  | 'noop';
+
+export interface UpsertRefundInput {
+  providerTransactionId: string;
+  providerRefundId: string;
+  amount: number;
+  reason: string | null;
+  refundStatus: 'approved' | 'failed';
+}
+
+export interface UpsertRefundResult {
+  outcome: RefundOutcome;
+  transactionId: string | null;
+}
+
 export interface IMobbexBillingSyncRepository {
   recordEvent(input: RecordEventInput): Promise<void>;
   updateTransactionStatus(input: UpdateTransactionStatusInput): Promise<UpdateTransactionStatusResult>;
+  upsertRefundAndMaybeMarkTransactionRefunded(input: UpsertRefundInput): Promise<UpsertRefundResult>;
 }

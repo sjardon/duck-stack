@@ -38,7 +38,22 @@ The `<feature-dir>` is the kebab-case slug already created during ds-analysis (e
 
 Do NOT proceed until the file is read and all IDs are catalogued.
 
-### 2. Evaluate solution alternatives
+### 2. Read applicable conventions
+
+Identify which apps the feature will touch (inferable from the `module` field and the typical mapping below) and read the corresponding conventions document(s) in full before evaluating alternatives:
+
+| App likely affected | Conventions doc |
+|---|---|
+| `apps/services/` (backend modules — `auth`, `billing`, `subscriptions`, `webhooks`, etc.) | `duck-spec/docs/BACKEND.md` |
+| `apps/web/`, `apps/landing/` (frontend modules) | `duck-spec/docs/FRONTEND.md` |
+
+The rules in those documents are **hard constraints with the same weight as the "Technical constraints" section of analysis.md**. The chosen solution, every entry in the Files section, and every task must respect them. Treat layering rules (e.g. "one repository per entity per data source", "use cases never consume other use cases", "no `process.env` outside config files") as design-level decisions, not implementation polish.
+
+If the design would require violating a convention, prefer redesigning over violating it. If a violation is genuinely unavoidable, note it explicitly in the "Chosen solution" justification with the reason.
+
+Do NOT proceed until the applicable conventions doc(s) have been read.
+
+### 3. Evaluate solution alternatives
 
 The number of alternatives to evaluate depends on `effort`:
 
@@ -58,7 +73,7 @@ Select the solution that best satisfies:
 3. Technical constraints from analysis.md
 4. Minimizes scope creep beyond what's in analysis.md
 
-### 3. Produce design.md
+### 4. Produce design.md
 
 Using the template in `design.template.md`, fill in each section:
 
@@ -83,7 +98,7 @@ Using the template in `design.template.md`, fill in each section:
 
 Write the output to: `duck-spec/modules/<module>/<feature-dir>/design.md`
 
-### 4. Produce tasks.md
+### 5. Produce tasks.md
 
 Using the template in `tasks.template.md`, create one task per atomic, function-level unit of work.
 
@@ -111,7 +126,7 @@ Tasks must also be ordered by dependency: if T002 depends on T001, T002 comes af
 
 Write the output to: `duck-spec/modules/<module>/<feature-dir>/tasks.md`
 
-### 5. Verify coverage
+### 6. Verify coverage
 
 Before returning, verify:
 - Every R-ID from analysis.md appears in the `Covers` column of at least one task in tasks.md

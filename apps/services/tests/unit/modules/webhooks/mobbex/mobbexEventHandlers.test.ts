@@ -6,6 +6,16 @@ function makeRepo(updateOutcome: 'approved' | 'failed' | 'noop' | 'unresolved' =
   return {
     updateTransactionStatus: jest.fn().mockResolvedValue({ outcome: updateOutcome, transactionId }),
     recordEvent: jest.fn().mockResolvedValue(undefined),
+    upsertRefundAndMaybeMarkTransactionRefunded: jest.fn().mockResolvedValue({ outcome: 'refund_approved', transactionId: 'uuid-tx-001' }),
+  };
+}
+
+function makeRefundRepo(refundOutcome: 'refund_approved' | 'refund_failed' | 'transaction_refunded' | 'unresolved' = 'refund_approved'): IMobbexBillingSyncRepository {
+  const transactionId = refundOutcome !== 'unresolved' ? 'uuid-tx-001' : null;
+  return {
+    updateTransactionStatus: jest.fn().mockResolvedValue({ outcome: 'noop', transactionId: null }),
+    recordEvent: jest.fn().mockResolvedValue(undefined),
+    upsertRefundAndMaybeMarkTransactionRefunded: jest.fn().mockResolvedValue({ outcome: refundOutcome, transactionId }),
   };
 }
 
@@ -147,5 +157,120 @@ describe('dispatchMobbexEvent — failure event', () => {
         reference: null,
       }),
     );
+  });
+});
+
+// T014 — refund.success event
+
+describe('dispatchMobbexEvent — refund.success event', () => {
+  it('WHEN event_type is "refund.success" with valid refund_id and positive amount THEN upsertRefundAndMaybeMarkTransactionRefunded is called with refundStatus "approved" and recordEvent is called afterward', async () => {
+    const repo = makeRefundRepo('refund_approved');
+    const payload = {
+      type: 'refund.success',
+      data: { id: 'ptx-001', refund_id: 'prov-refund-001', amount: 500, reason: 'Customer request' },
+    };
+
+    await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerTransactionId: 'ptx-001',
+        providerRefundId: 'prov-refund-001',
+        amount: 500,
+        reason: 'Customer request',
+        refundStatus: 'approved',
+      }),
+    );
+    expect(repo.recordEvent).toHaveBeenCalledTimes(1);
+    expect(repo.updateTransactionStatus).not.toHaveBeenCalled();
+  });
+});
+
+// T015 — refund.failure event
+
+describe('dispatchMobbexEvent — refund.failure event', () => {
+  it('WHEN event_type is "refund.failure" THEN upsertRefundAndMaybeMarkTransactionRefunded is called with refundStatus "failed" and recordEvent is called', async () => {
+    const repo = makeRefundRepo('refund_failed');
+    const payload = {
+      type: 'refund.failure',
+      data: { id: 'ptx-001', refund_id: 'prov-refund-002', amount: 300, reason: 'Declined' },
+    };
+
+    await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        refundStatus: 'failed',
+        providerRefundId: 'prov-refund-002',
+        amount: 300,
+      }),
+    );
+    expect(repo.recordEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+// T016 — missing providerRefundId
+
+describe('dispatchMobbexEvent — missing providerRefundId', () => {
+  it('WHEN data.refund_id is absent THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called, recordEvent IS called with transactionId: null, and outcome is "unresolved"', async () => {
+    const repo = makeRefundRepo();
+    const payload = {
+      type: 'refund.success',
+      data: { id: 'ptx-001', amount: 500 }, // no refund_id
+    };
+
+    const outcome = await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
+    expect(repo.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: null }),
+    );
+    expect(outcome).toBe('unresolved');
+  });
+});
+
+// T017 — missing or non-positive amount
+
+describe('dispatchMobbexEvent — missing or non-positive amount', () => {
+  it('WHEN data.amount is absent THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called, recordEvent IS called with transactionId: null, and outcome is "unresolved"', async () => {
+    const repo = makeRefundRepo();
+    const payload = {
+      type: 'refund.success',
+      data: { id: 'ptx-001', refund_id: 'prov-refund-003' }, // no amount
+    };
+
+    const outcome = await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
+    expect(repo.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: null }),
+    );
+    expect(outcome).toBe('unresolved');
+  });
+
+  it('WHEN data.amount is zero THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called and outcome is "unresolved"', async () => {
+    const repo = makeRefundRepo();
+    const payload = {
+      type: 'refund.success',
+      data: { id: 'ptx-001', refund_id: 'prov-refund-004', amount: 0 },
+    };
+
+    const outcome = await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
+    expect(outcome).toBe('unresolved');
+  });
+
+  it('WHEN data.amount is negative THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called and outcome is "unresolved"', async () => {
+    const repo = makeRefundRepo();
+    const payload = {
+      type: 'refund.failure',
+      data: { id: 'ptx-001', refund_id: 'prov-refund-005', amount: -100 },
+    };
+
+    const outcome = await dispatchMobbexEvent(payload, repo);
+
+    expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
+    expect(outcome).toBe('unresolved');
   });
 });
