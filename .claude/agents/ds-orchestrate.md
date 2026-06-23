@@ -1,5 +1,5 @@
 ---
-name: ds-orchestrate
+name: ds-orchestrate-agent
 description: Orchestrates the full duck-spec workflow for a feature from FEATURES.md: analysis → design → implement → review (with retry) → docs → integrate. Coordinates all ds- agents without implementing anything itself.
 skills:
   - ds-orchestrate

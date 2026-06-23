@@ -1,6 +1,6 @@
 ---
 name: ds-orchestrate
-description: Orchestrates the full duck-spec workflow for a feature from FEATURES.md: analysis → design → implement → review (with retry) → docs → integrate. Coordinates all ds- agents without implementing anything itself.
+description: Orchestrates the full duck-spec workflow for a feature from FEATURES.md: analysis → design → implement → review (with retry) → docs → integrate. Coordinates all ds-*-agents without implementing anything itself.
 ---
 
 # Duck-Spec Orchestrator
@@ -30,10 +30,10 @@ Every agent invocation receives and returns this JSON object. You are responsibl
 | Field | Owner | Description |
 |---|---|---|
 | `featureId` | you (input) | Feature ID from FEATURES.md |
-| `branch` | ds-integrate (Step 1) | Git branch to work on. Created before analysis starts. |
-| `effort` | ds-analysis | Effort level. Determines whether design evaluates more solutions. |
+| `branch` | ds-integrate-agent (Step 1) | Git branch to work on. Created before analysis starts. |
+| `effort` | ds-analysis-agent | Effort level. Determines whether design evaluates more solutions. |
 | `lastStep` | you | Last successfully completed step. Allows resuming a failed run. |
-| `pendingFixes` | ds-review | Findings that must be fixed. Passed to ds-implement on retry. Cleared on pass. |
+| `pendingFixes` | ds-review-agent | Findings that must be fixed. Passed to ds-implement-agent on retry. Cleared on pass. |
 
 ## Mandatory checklist
 
@@ -53,14 +53,14 @@ Output this checklist after each step and mark `[x]` as steps complete:
 
 ### Step 1 — Branch creation (MANDATORY)
 
-Invoke: **ds-integrate** agent — operation `CREATE_BRANCH`
+Invoke: **ds-integrate-agent** — operation `CREATE_BRANCH`
 
 Pass:
 ```json
 { "featureId": "<id>", "branch": null, "effort": null, "lastStep": null, "pendingFixes": [] }
 ```
 
-ds-integrate derives the branch name from `featureId` and creates the branch. It returns the updated context with `branch` set.
+ds-integrate-agent derives the branch name from `featureId` and creates the branch. It returns the updated context with `branch` set.
 
 Do NOT proceed until `branch` is set in the returned context.
 
@@ -68,9 +68,9 @@ Update `lastStep` to `"branch"`.
 
 ### Step 2 — Analysis (MANDATORY)
 
-Invoke: **ds-analysis** agent
+Invoke: **ds-analysis-agent**
 
-Pass the current context. ds-analysis reads the feature from `duck-spec/modules/<module>/FEATURES.md`, produces `duck-spec/modules/<module>/<feature-dir>/analysis.md`, and returns the updated context with `effort` set.
+Pass the current context. ds-analysis-agent reads the feature from `duck-spec/modules/<module>/FEATURES.md`, produces `duck-spec/modules/<module>/<feature-dir>/analysis.md`, and returns the updated context with `effort` set.
 
 Do NOT proceed until the analysis step is ended.
 
@@ -78,9 +78,9 @@ Update `lastStep` to `"analysis"`.
 
 ### Step 3 — Design (MANDATORY)
 
-Invoke: **ds-design** agent
+Invoke: **ds-design-agent**
 
-Pass the current context. ds-design reads `analysis.md`, evaluates at least three solution alternatives, chooses one, and produces:
+Pass the current context. ds-design-agent reads `analysis.md`, evaluates at least three solution alternatives, chooses one, and produces:
 - `duck-spec/modules/<module>/<feature-dir>/design.md` — technical design, contracts, files to modify
 - `duck-spec/modules/<module>/<feature-dir>/tasks.md` — task list with IDs (T001…) referencing requirements (R1…)
 
@@ -90,11 +90,11 @@ Update `lastStep` to `"design"`.
 
 ### Step 4 — Implementation (MANDATORY)
 
-Invoke: **ds-implement** agent
+Invoke: **ds-implement-agent**
 
-Pass the current context. ds-implement reads `analysis.md`, `design.md`, and `tasks.md` and implements all tasks.
+Pass the current context. ds-implement-agent reads `analysis.md`, `design.md`, and `tasks.md` and implements all tasks.
 
-ds-implement returns:
+ds-implement-agent returns:
 ```json
 { "status": "success|failure", "error": "<detail if failure, otherwise null>" }
 ```
@@ -105,14 +105,14 @@ Update `lastStep` to `"implement"`.
 
 ### Step 5 — Review (MANDATORY, with retry)
 
-Invoke: **ds-review** agent
+Invoke: **ds-review-agent**
 
-Pass the current context. ds-review runs in two phases:
+Pass the current context. ds-review-agent runs in two phases:
 
 1. **Technical**: lint, build, unit tests
 2. **Functional**: verifies that all EARS requirements in `analysis.md` are satisfied
 
-ds-review returns:
+ds-review-agent returns:
 ```json
 {
   "status": "pass|fail",
@@ -126,24 +126,24 @@ ds-review returns:
 
 **If `status` is `"fail"`**:
 - Set `pendingFixes` to the `findings` array from the response
-- Re-invoke **ds-implement** passing the updated context (with `pendingFixes` populated)
-- Re-invoke **ds-review** after each implementation retry
+- Re-invoke **ds-implement-agent** passing the updated context (with `pendingFixes` populated)
+- Re-invoke **ds-review-agent** after each implementation retry
 - Maximum **3 retries** total
 - If still failing after 3 retries: STOP and report all findings to the user. Do NOT proceed to Step 6.
 
 ### Step 6 — Docs (MANDATORY)
 
-Invoke: **ds-docs** agent
+Invoke: **ds-docs-agent**
 
-Pass the current context. ds-docs reads `analysis.md` and `design.md` and updates the relevant global documentation files based on what was actually built (ARCHITECTURE.md, BACKEND.md, DOMAIN.md, FEATURES.md status, etc.).
+Pass the current context. ds-docs-agent reads `analysis.md` and `design.md` and updates the relevant global documentation files based on what was actually built (ARCHITECTURE.md, BACKEND.md, DOMAIN.md, FEATURES.md status, etc.).
 
 Update `lastStep` to `"docs"`.
 
 ### Step 7 — Integrate (MANDATORY)
 
-Invoke: **ds-integrate** agent — operation `CREATE_MR`
+Invoke: **ds-integrate-agent** — operation `CREATE_MR`
 
-Pass the current context. ds-integrate creates an MR in GitHub with all changes from the feature branch.
+Pass the current context. ds-integrate-agent creates an MR in GitHub with all changes from the feature branch.
 
 Update `lastStep` to `"integrate"`.
 

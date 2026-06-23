@@ -7,12 +7,10 @@
    - A short summary of the functional requirements for the PR body
 
 2. Read `duck-spec/modules/<module>/<feature-dir>/design.md` and scan the **Files** table to derive the affected components diagram:
-   - Group modified/created files by their top-level app or package (e.g. `apps/web`, `apps/services`, `packages/types`, `apps/services/supabase`).
-   - Identify the external systems each component interacts with (e.g. Supabase DB, a PaymentProvider, an external API).
-   - Build a `graph TD` Mermaid diagram where each node is a component (app, package, or external system) and each edge represents a dependency or data-flow direction inferred from the design. Use shape conventions:
+   - Identify components and data-flows.
+   - Build a `graph TD` Mermaid diagram where each node is a component (API endpoint `GET /example`, function name, class name `UserCreationUseCase()`, frontend component, table name `transactions`, conditionals branches, external system) and each edge represents a dependency or data-flow direction inferred from the design. Use shape conventions:
      - Rounded box `(label)` for app or package nodes.
-     - Cylinder `[(label)]` for databases.
-     - Hexagon `{{label}}` for external provider/API nodes.
+     - Hexagon `{{label}}` for conditions or loops.
    - Label edges with the key operation or artifact exchanged (e.g. `REST`, `shared types`, `SQL`, `createCheckout`).
 
 3. Open the MR:

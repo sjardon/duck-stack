@@ -1,5 +1,5 @@
 ---
-name: ds-design
+name: ds-design-agent
 description: Takes analysis.md for a feature and produces design.md (alternatives when effort is high, chosen solution, technical design, files to modify) and tasks.md (function-level task list referencing R-IDs). Sets lastStep to "design".
 skills:
   - ds-design

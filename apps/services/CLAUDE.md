@@ -49,7 +49,7 @@ Handler → UseCase → IRepository (implemented by) Repository
 ## Comments
 
 **Comments must be small**
-**Add comments only when necessary:** For understanding the domain logic or complex technical decisions.
+**Add comments for understanding the domain and technical logic**
 
 ## Logging
 
