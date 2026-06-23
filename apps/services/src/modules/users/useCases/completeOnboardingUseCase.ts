@@ -1,5 +1,5 @@
 import type { UserProfile } from '@repo/types';
-import type { IUserRepository } from '../repositories/interfaces/IUserRepository.js';
+import type { IUserRepository } from '../repositories/interfaces/iUserRepository.js';
 
 export class CompleteOnboardingUseCase {
   constructor(private readonly repo: IUserRepository) {}

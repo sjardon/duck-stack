@@ -17,7 +17,7 @@ const completedProfile: UserProfile = {
   onboarding_completed: true,
 };
 
-jest.mock('../../../src/modules/users/repositories/UserDBRepository.js', () => ({
+jest.mock('../../../src/modules/users/repositories/userDBRepository.js', () => ({
   UserDBRepository: jest.fn().mockImplementation(() => ({
     findByClerkUserId: jest.fn(),
     updatePreferences: jest.fn(),
@@ -25,7 +25,7 @@ jest.mock('../../../src/modules/users/repositories/UserDBRepository.js', () => (
   })),
 }));
 
-jest.mock('../../../src/modules/users/useCases/CompleteOnboardingUseCase.js', () => ({
+jest.mock('../../../src/modules/users/useCases/completeOnboardingUseCase.js', () => ({
   CompleteOnboardingUseCase: jest.fn().mockImplementation(() => ({
     execute: jest.fn().mockResolvedValue(completedProfile),
   })),
@@ -90,7 +90,7 @@ describe('completeOnboardingHandler', () => {
 
   it('(NF001) valid body reaches use case and returns 200 with profile', async () => {
     const { CompleteOnboardingUseCase } = jest.requireMock(
-      '../../../src/modules/users/useCases/CompleteOnboardingUseCase.js',
+      '../../../src/modules/users/useCases/completeOnboardingUseCase.js',
     ) as { CompleteOnboardingUseCase: jest.Mock };
 
     const mockExecute = jest.fn().mockResolvedValue(completedProfile);

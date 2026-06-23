@@ -1,8 +1,8 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import { db } from '../../../shared/infrastructure/db.js';
-import { UserDBRepository } from '../repositories/UserDBRepository.js';
-import { CompleteOnboardingUseCase } from '../useCases/CompleteOnboardingUseCase.js';
+import { UserDBRepository } from '../repositories/userDBRepository.js';
+import { CompleteOnboardingUseCase } from '../useCases/completeOnboardingUseCase.js';
 import { CompleteOnboardingBody } from '../dtos/completeOnboarding.dto.js';
 
 export async function completeOnboardingHandler(

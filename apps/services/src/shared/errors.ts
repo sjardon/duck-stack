@@ -32,3 +32,9 @@ export class ForbiddenError extends DomainError {
     super('FORBIDDEN', 'Forbidden', 403);
   }
 }
+
+export class ProviderError extends DomainError {
+  constructor(message: string, statusCode: 400 | 502 = 502) {
+    super('PROVIDER_ERROR', message, statusCode);
+  }
+}

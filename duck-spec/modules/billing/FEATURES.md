@@ -8,7 +8,7 @@ Módulo de billing. Abstrae proveedores de pago y maneja transacciones one-off (
 
 ## BILLING-001 — Payment Provider Abstraction & Mobbex Adapter
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

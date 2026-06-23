@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 import type { UserProfile } from '@repo/types';
-import type { IUserRepository } from './interfaces/IUserRepository.js';
+import type { IUserRepository } from './interfaces/iUserRepository.js';
 import { NotFoundError } from '../../../shared/errors.js';
 
 export class UserDBRepository implements IUserRepository {

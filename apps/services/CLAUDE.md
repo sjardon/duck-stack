@@ -23,11 +23,12 @@ Handler → UseCase → IRepository (implemented by) Repository
 
 **`src/shared/`** — only genuinely reusable code across modules: configs, middlewares, shared DTOs, utils (logger, errors, parsers), shared repositories.
 
-**`tests/unit/`** — unit tests in Jest. Interface mocks in `tests/mocks/`.
+**`tests/unit/`** — unit tests in Jest. Interface mocks in `tests/mocks/`. Structure test following the same path that the file that is tested, in example, FOR: `src/modules/billing/providers/mobbexProvider.ts` set its tests in `tests/unit/modules/billing/providers/mobbexProvider.test.ts` 
 
 ## Coding conventions
 
 **Use raw SQL for all database queries:** Use `postgres.js` tagged-template queries directly. Do not introduce ORMs, query builders, or other SQL abstraction libraries.
+**Use camel case starting with lower case for file names**: DO: completeOnboardingUseCase.ts, getUserProfileUseCase.ts. DONOT: completeOnboarding.use-case.ts, GetUserProfileUseCase.ts.
 **DONOT use concrete architecture names, use abstract names instead**: DONOT: UserSupabaseRepository, AuthSnsRepository, CreateClerkUserUseCase. DO: UserDBRepository, AuthEventRepository, CreateUserUseCase.
 **Apply Clean Code principles**
 **Apply SOLID principles**

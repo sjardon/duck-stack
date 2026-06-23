@@ -8,8 +8,12 @@ import clerkAuthPlugin from './shared/plugins/clerk-auth.plugin.js';
 import healthRoutes from './modules/health/routes.js';
 import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
 import usersRoutes from './modules/users/routes.js';
+import { resolveProvider } from './modules/billing/providers/resolveProvider.js';
 
 export async function createApp(): Promise<FastifyInstance> {
+  // Fail fast on misconfigured payment provider before the HTTP server starts
+  resolveProvider();
+
   const fastify = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',

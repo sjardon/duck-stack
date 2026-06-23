@@ -46,9 +46,9 @@ See `duck-spec/modules/services/SPEC.md` for full details.
 
 ## billing
 
-**Status:** Planned — not yet implemented.
+**Status:** Payment provider port and Mobbex adapter implemented (BILLING-001). Transaction persistence, webhooks, and refunds are planned.
 
-Four features designed: provider abstraction layer (port/adapter for multi-provider support), checkout & transaction records, payment webhooks, and refunds. Initial provider: Mobbex.
+The billing module exposes a `PaymentProvider` port in `@repo/types` with five operations: `createCheckout`, `queryTransaction`, `createSubscription`, `cancelSubscription`, and `verifyWebhook`. The active provider is resolved at boot time via `resolveProvider()` reading `BILLING_PROVIDER` (default `mobbex`); the service refuses to start if the provider is unknown or credentials are missing. `MobbexProvider` is the only implemented adapter, targeting the Mobbex HTTP API (Argentina/LATAM market). Provider errors are mapped to `ProviderError` (`statusCode 502` for upstream failures, `400` for validation errors).
 
 See `duck-spec/modules/billing/SPEC.md` for full details.
 
