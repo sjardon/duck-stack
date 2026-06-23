@@ -2,7 +2,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { verifyWebhook } from '@clerk/backend/webhooks';
 import { db } from '../../../shared/infrastructure/db.js';
-import { ClerkSyncRepository } from './clerkSyncRepository.js';
+import { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
 import { dispatchClerkEvent } from './clerkEventHandlers.js';
 
 export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {

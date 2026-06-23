@@ -2,11 +2,13 @@ import type { Sql } from 'postgres';
 import type { UserProfile } from '@repo/types';
 import type { IUserRepository } from './interfaces/iUserRepository.js';
 import { NotFoundError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class UserDBRepository implements IUserRepository {
   constructor(private readonly sql: Sql) {}
 
   async findByClerkUserId(clerkUserId: string): Promise<UserProfile | null> {
+    const start = Date.now();
     const rows = await this.sql<
       Array<{
         name: string;
@@ -24,6 +26,7 @@ export class UserDBRepository implements IUserRepository {
       FROM users
       WHERE clerk_user_id = ${clerkUserId}
       LIMIT 1`;
+    logger.info({ duration: Date.now() - start }, 'UserDBRepository.findByClerkUserId');
 
     if (rows.length === 0) {
       return null;
@@ -59,6 +62,7 @@ export class UserDBRepository implements IUserRepository {
       columns.push('timezone');
     }
 
+    const start = Date.now();
     const rows = await this.sql<
       Array<{
         name: string;
@@ -76,6 +80,11 @@ export class UserDBRepository implements IUserRepository {
       WHERE clerk_user_id = ${clerkUserId}
       RETURNING name, email, avatar_url, locale, timezone,
                 job_role, company_size, primary_use_case, onboarding_completed`;
+    logger.info({ duration: Date.now() - start }, 'UserDBRepository.updatePreferences');
+
+    if (rows.length === 0) {
+      throw new NotFoundError('User');
+    }
 
     const row = rows[0];
     return {
@@ -95,6 +104,7 @@ export class UserDBRepository implements IUserRepository {
     clerkUserId: string,
     data: { job_role: string; company_size: string; primary_use_case: string },
   ): Promise<UserProfile> {
+    const start = Date.now();
     const rows = await this.sql<
       Array<{
         name: string;
@@ -115,6 +125,7 @@ export class UserDBRepository implements IUserRepository {
       WHERE clerk_user_id = ${clerkUserId}
       RETURNING name, email, avatar_url, locale, timezone,
                 job_role, company_size, primary_use_case, onboarding_completed`;
+    logger.info({ duration: Date.now() - start }, 'UserDBRepository.completeOnboarding');
 
     if (rows.length === 0) {
       throw new NotFoundError('User');

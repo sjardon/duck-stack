@@ -29,9 +29,22 @@ Handler → UseCase → IRepository (implemented by) Repository
 
 **Apply Clean Code principles**
 **Apply SOLID principles**
-**Use raw SQL for all database queries:** Use `postgres.js` tagged-template queries directly. Do not introduce ORMs, query builders, or other SQL abstraction libraries.
 **Use camel case starting with lower case for file names**: DO: completeOnboardingUseCase.ts, getUserProfileUseCase.ts. DONOT: completeOnboarding.use-case.ts, GetUserProfileUseCase.ts.
 **DONOT use concrete architecture names, use abstract names instead**: DONOT: UserSupabaseRepository, AuthSnsRepository, CreateClerkUserUseCase. DO: UserDBRepository, AuthEventRepository, CreateUserUseCase.
+
+## SQL Queries
+
+**Use raw SQL for all database queries:** Use `postgres.js` tagged-template queries directly. Do not introduce ORMs, query builders, or other SQL abstraction libraries.
+**Always use parameterized queries:** Use tagged template literals — never interpolate values directly into SQL strings to prevent SQL injection.
+**Avoid `SELECT *`:** Select only the columns you need to reduce payload and avoid schema drift leaking unexpected fields.
+**Validate before querying:** Sanitize and validate all external input at the boundary before it reaches the query.
+**Wrap multi-step writes in transactions:** Any sequence of writes that must succeed or fail together must use `sql.begin(async (tx) => { ... })`.
+**Keep queries in repositories:** No raw SQL in use cases or handlers — only in repository files.
+**Always paginate unbounded queries:** Apply `LIMIT` and `OFFSET` (or cursor-based pagination) when querying collections.
+**Log query latency:** Track duration at the repository layer for every external DB call.
+**Enforce constraints at the DB level:** Do not rely solely on app-level validation — use `NOT NULL`, `UNIQUE`, `CHECK`, and `FK` constraints.
+**Keep migrations separate from queries:** Schema changes belong in versioned migration files, not in application startup code.
+
 
 ## Comments
 
