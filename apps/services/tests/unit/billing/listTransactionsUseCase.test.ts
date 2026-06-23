@@ -1,7 +1,7 @@
 import { ListTransactionsUseCase } from '../../../src/modules/billing/useCases/listTransactionsUseCase.js';
 import { ValidationError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
-import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
+import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
 
 const baseEntity: TransactionEntity = {
   id: 'uuid-001',

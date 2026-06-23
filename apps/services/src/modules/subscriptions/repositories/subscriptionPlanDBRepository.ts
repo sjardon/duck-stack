@@ -1,5 +1,5 @@
 import type { Sql } from 'postgres';
-import type { SubscriptionPlanEntity } from '../entities/subscriptionPlan.entity.js';
+import type { SubscriptionPlanEntity } from '../entities/subscriptionPlanEntity.js';
 import type { ISubscriptionPlanRepository } from './interfaces/iSubscriptionPlanRepository.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 

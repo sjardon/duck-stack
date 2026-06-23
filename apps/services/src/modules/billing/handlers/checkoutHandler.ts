@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../../shared/infrastructure/db.js';
-import { CheckoutBodySchema } from '../dtos/checkout.dto.js';
+import { CheckoutBodySchema } from '../dtos/checkoutDto.js';
 import { TransactionDBRepository } from '../repositories/transactionDBRepository.js';
 import { CheckoutUseCase } from '../useCases/checkoutUseCase.js';
 

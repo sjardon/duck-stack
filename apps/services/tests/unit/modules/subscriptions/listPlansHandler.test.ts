@@ -21,7 +21,7 @@ jest.mock('../../../../src/modules/subscriptions/useCases/listPlansUseCase.js', 
 });
 
 import { listPlansHandler } from '../../../../src/modules/subscriptions/handlers/listPlansHandler.js';
-import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlan.entity.js';
+import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
 
 const freePlan: SubscriptionPlanEntity = {
   id: '00000000-0000-0000-0001-000000000001',

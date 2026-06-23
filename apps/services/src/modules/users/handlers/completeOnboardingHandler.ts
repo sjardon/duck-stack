@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import { db } from '../../../shared/infrastructure/db.js';
 import { UserDBRepository } from '../repositories/userDBRepository.js';
 import { CompleteOnboardingUseCase } from '../useCases/completeOnboardingUseCase.js';
-import { CompleteOnboardingBody } from '../dtos/completeOnboarding.dto.js';
+import { CompleteOnboardingBody } from '../dtos/completeOnboardingDto.js';
 
 export async function completeOnboardingHandler(
   request: FastifyRequest,

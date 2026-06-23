@@ -34,7 +34,7 @@ Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastif
 
 SOLID and Clean Code principles are hard expectations for every module — they govern design decisions, not just implementation polish.
 
-**File naming.** Use camelCase starting with lowercase. DO: `completeOnboardingUseCase.ts`, `getUserProfileUseCase.ts`. DO NOT: `completeOnboarding.use-case.ts`, `GetUserProfileUseCase.ts`.
+**File naming.** Use camelCase starting with lowercase, with no dot-separated suffixes other than `.ts` and `.test.ts`, and no hyphens. DO: `completeOnboardingUseCase.ts`, `getUserProfileUseCase.ts`, `errorHandler.ts`, `clerkAuthPlugin.ts`, `checkoutDto.ts`, `userEntity.ts`. DO NOT: `completeOnboarding.use-case.ts`, `GetUserProfileUseCase.ts`, `error-handler.ts`, `clerk-auth.plugin.ts`, `checkout.dto.ts`, `user.entity.ts`. This convention is consistently enforced across all plugin, entity, and DTO files under `apps/services/src/`.
 
 **Abstract names over concrete architecture names.** Names must describe the role, not the implementation technology.
 - DO NOT: `UserSupabaseRepository`, `AuthSnsRepository`, `CreateClerkUserUseCase`.
@@ -74,7 +74,7 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
-`shared/plugins/error-handler.ts` intercepts `DomainError` and replies `{ code, message }` at the error's `statusCode`. Unknown errors fall through to Fastify's default handler.
+`shared/plugins/errorHandler.ts` intercepts `DomainError` and replies `{ code, message }` at the error's `statusCode`. Unknown errors fall through to Fastify's default handler.
 
 ## Security plugins
 
@@ -84,7 +84,7 @@ Registered globally in `app.ts`:
 
 ## Authentication plugin
 
-`shared/plugins/clerk-auth.plugin.ts` is registered via `fastify-plugin` immediately after the security plugins so its `onRequest` hook fires on all routes. The plugin:
+`shared/plugins/clerkAuthPlugin.ts` is registered via `fastify-plugin` immediately after the security plugins so its `onRequest` hook fires on all routes. The plugin:
 
 1. Reads `CLERK_SECRET_KEY` from `process.env` at registration time; throws if absent.
 2. Creates a Clerk client via `@clerk/backend`'s `createClerkClient`, which fetches and caches Clerk's JWKS key set once. No Clerk API call occurs per request.
@@ -105,8 +105,8 @@ Two reusable preHandler functions live in `src/shared/plugins/`:
 
 | Export | File | Behavior |
 |--------|------|----------|
-| `requireAuth` | `require-auth.ts` | Throws `UnauthorizedError` (401) when `request.userId` is `undefined` |
-| `requireOrg` | `require-org.ts` | Calls `requireAuth`, then throws `ForbiddenError` (403) when `request.orgId` is `null` |
+| `requireAuth` | `requireAuth.ts` | Throws `UnauthorizedError` (401) when `request.userId` is `undefined` |
+| `requireOrg` | `requireOrg.ts` | Calls `requireAuth`, then throws `ForbiddenError` (403) when `request.orgId` is `null` |
 
 Neither preHandler is registered globally. Routes opt in by listing the relevant function in their `preHandler` array. Organization-scoped enforcement is a per-route decision — the starter does not impose it globally.
 

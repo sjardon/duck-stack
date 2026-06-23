@@ -1,7 +1,7 @@
 import { GetTransactionUseCase } from '../../../src/modules/billing/useCases/getTransactionUseCase.js';
 import { NotFoundError, ForbiddenError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
-import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
+import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
 
 const userTransaction: TransactionEntity = {
   id: 'uuid-001',

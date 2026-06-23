@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../../shared/plugins/require-auth.js';
+import { requireAuth } from '../../shared/plugins/requireAuth.js';
 import { getUserProfileHandler } from './handlers/getUserProfileHandler.js';
 import { updateUserProfileHandler } from './handlers/updateUserProfileHandler.js';
 import { completeOnboardingHandler } from './handlers/completeOnboardingHandler.js';

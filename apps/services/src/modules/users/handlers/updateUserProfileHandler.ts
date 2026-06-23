@@ -3,7 +3,7 @@ import { ZodError } from 'zod';
 import { db } from '../../../shared/infrastructure/db.js';
 import { UserDBRepository } from '../repositories/userDBRepository.js';
 import { UpdateUserProfileUseCase } from '../useCases/updateUserProfileUseCase.js';
-import { UpdateProfileBody } from '../dtos/updateProfile.dto.js';
+import { UpdateProfileBody } from '../dtos/updateProfileDto.js';
 
 export async function updateUserProfileHandler(
   request: FastifyRequest,

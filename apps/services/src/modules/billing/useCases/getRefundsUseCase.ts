@@ -1,6 +1,6 @@
 import { NotFoundError, ForbiddenError } from '../../../shared/errors.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
-import type { RefundEntity } from '../entities/refund.entity.js';
+import type { RefundEntity } from '../entities/refundEntity.js';
 
 export class GetRefundsUseCase {
   constructor(private readonly repo: ITransactionRepository) {}
