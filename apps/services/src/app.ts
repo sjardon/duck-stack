@@ -7,6 +7,7 @@ import helmetPlugin from './shared/plugins/helmet.js';
 import clerkAuthPlugin from './shared/plugins/clerk-auth.plugin.js';
 import healthRoutes from './modules/health/routes.js';
 import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
+import mobbexWebhookRoutes from './modules/webhooks/mobbex/routes.js';
 import usersRoutes from './modules/users/routes.js';
 import billingRoutes from './modules/billing/routes.js';
 import { resolveProvider } from './modules/billing/providers/resolveProvider.js';
@@ -29,6 +30,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await fastify.register(errorHandlerPlugin);
   await fastify.register(corsPlugin);
   await fastify.register(helmetPlugin);
+  await fastify.register(mobbexWebhookRoutes);
   await fastify.register(clerkWebhookRoutes);
   await fastify.register(clerkAuthPlugin);
   await fastify.register(usersRoutes);
