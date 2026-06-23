@@ -93,6 +93,30 @@ Neither preHandler is registered globally. Routes opt in by listing the relevant
 
 `shared/infrastructure/db.ts` exports a `postgres.js` `Sql` singleton created from `DATABASE_URL`. Throws a descriptive error synchronously at module load time if `DATABASE_URL` is absent or empty, preventing the server from starting. Repositories import this singleton directly and execute all queries as tagged-template SQL calls over a direct TCP connection to Postgres. `@supabase/supabase-js` is not a runtime dependency of `apps/services`.
 
+## Feature module structure
+
+Feature modules follow a **handler → useCase → IRepository → DBRepository** vertical slice. Each concern lives in its own file; no business logic is placed directly in route handlers.
+
+| Subdirectory | Responsibility |
+|---|---|
+| `entities/` | Plain TypeScript interfaces mirroring database rows; no methods or runtime dependencies |
+| `repositories/interfaces/` | Repository interface (`IFooRepository`) declaring typed methods; no SQL |
+| `repositories/` | `FooDBRepository` implementing the interface using the `postgres.js` singleton |
+| `dtos/` | Zod schemas for request body and query validation |
+| `useCases/` | One class per endpoint; receives an `IFooRepository` via constructor; contains all business logic |
+| `handlers/` | Thin Fastify handler functions; validate input with Zod, instantiate the use case, call `execute`, reply |
+| `routes.ts` | Fastify plugin that registers all routes for the module with their `preHandler` arrays |
+
+This pattern is established by the `billing` module (BILLING-002) and mirrors the `users` module structure. New feature modules must follow the same layout.
+
+### Repository interface pattern
+
+Repository interfaces (`IFooRepository`) define only the data-access contract. Implementations (`FooDBRepository`) are instantiated directly in handlers — no DI container is used. This keeps use cases testable by substituting a fake repository without a real database.
+
+### Cursor-based pagination
+
+Listing endpoints that may return large result sets use cursor-based pagination rather than offset pagination. The cursor encodes a `(created_at, id)` pair as base64. The repository queries with `(created_at, id) < (cursor_created_at, cursor_id) ORDER BY created_at DESC, id DESC LIMIT limit + 1`; if `limit + 1` rows are returned the extra row's pair is encoded as the `nextCursor`; otherwise `nextCursor` is `null`. Malformed or expired cursors return HTTP 400 with code `VALIDATION_ERROR`.
+
 ## Webhook modules
 
 Webhook endpoints are feature modules, not shared plugins. Each provider's webhook handler lives under `src/modules/webhooks/<provider>/` and is registered in `app.ts` as a scoped Fastify plugin.

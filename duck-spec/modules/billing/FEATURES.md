@@ -73,7 +73,7 @@ Definir un puerto (interfaz) de proveedor de pago independiente de Mobbex e impl
 
 ## BILLING-002 — Checkout & Transaction Records
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

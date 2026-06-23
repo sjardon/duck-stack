@@ -1,10 +1,9 @@
 import postgres from 'postgres';
 import type { Sql } from 'postgres';
+import { dbConfig } from '../configs/dbConfig.js';
 
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
+if (!dbConfig.databaseUrl) {
   throw new Error('Missing required environment variable: DATABASE_URL');
 }
 
-export const db: Sql = postgres(databaseUrl);
+export const db: Sql = postgres(dbConfig.databaseUrl);

@@ -1,6 +1,6 @@
 import type { WebhookEvent } from '@clerk/backend/webhooks';
 import type { UserJSON, OrganizationJSON, OrganizationMembershipJSON } from '@clerk/backend';
-import type { ClerkSyncRepository } from './clerkSyncRepository.js';
+import type { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
 
 export async function handleUserUpsert(
   event: WebhookEvent & { data: UserJSON },
