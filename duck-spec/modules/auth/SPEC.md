@@ -23,9 +23,10 @@ React Router handles all routing. The route table includes:
 | `/org/create` | `CreateOrgPage` (`<CreateOrganization />`) | `AuthGuard` |
 | `/org/profile` | `OrgProfilePage` (`<OrganizationProfile />`) | `AuthGuard` |
 | `/profile` | `ProfilePage` | `AuthGuard` |
+| `/onboarding` | `OnboardingPage` | `AuthGuard` |
 | `/*` (layout) | `AppLayout` + nested routes | `AuthGuard` |
 
-`AuthGuard` reads `useAuth().isSignedIn` from Clerk. While Clerk is loading it renders a loading state. When `isSignedIn` is false it redirects to `/sign-in`. When true it renders `<Outlet />`.
+`AuthGuard` enforces both authentication and onboarding completion before rendering any protected page. It first checks `useAuth().isSignedIn` — while Clerk is initialising it renders a loading state, and when `isSignedIn` is false it redirects to `/sign-in`. When authenticated it also fetches `useUserProfile()` to read `onboarding_completed`: while the profile is loading or errored, it holds in a neutral loading state without redirecting. Once the profile is loaded, if `onboarding_completed` is `false` and the current path is not `/onboarding`, it redirects to `/onboarding` before rendering any page. If `onboarding_completed` is `true` and the current path is `/onboarding`, it redirects to the dashboard. Otherwise it renders `<Outlet />`.
 
 `useCurrentUser` (in `hooks/use-current-user.ts`) wraps Clerk's `useUser` and returns `UserResource | null`. `useCurrentOrg` (in `hooks/use-current-org.ts`) wraps `useOrganization` and returns `OrganizationResource | null`. Both return `null` when the resource is not loaded or not present, including when no organization is active.
 
@@ -63,22 +64,27 @@ Clerk Organizations serve as the multi-tenancy primitive. The starter exposes `o
 
 ## User profile endpoints
 
-`apps/services` exposes two authenticated REST endpoints in `src/modules/users/`:
+`apps/services` exposes three authenticated REST endpoints in `src/modules/users/`:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/users/me` | `requireAuth` | Returns the authenticated user's profile: `name`, `email`, `avatar_url`, `locale`, `timezone`. Returns HTTP 404 (`NOT_FOUND`) when no `users` row matches the request's `clerk_user_id`. |
+| `GET` | `/users/me` | `requireAuth` | Returns the authenticated user's profile: `name`, `email`, `avatar_url`, `locale`, `timezone`, `job_role`, `company_size`, `primary_use_case`, `onboarding_completed`. Returns HTTP 404 (`NOT_FOUND`) when no `users` row matches the request's `clerk_user_id`. |
 | `PATCH` | `/users/me` | `requireAuth` | Accepts a strict body containing only `locale` and/or `timezone` (both nullable strings). Updates the matching row and returns the updated profile. An empty body is a no-op returning the current profile with HTTP 200. Unknown fields are rejected with HTTP 400 via Zod `.strict()` validation. |
+| `POST` | `/users/me/onboarding` | `requireAuth` | Accepts a strict body containing `job_role`, `company_size`, and `primary_use_case` (all required, non-empty strings). Persists the three segmentation fields and sets `onboarding_completed = true` in a single atomic `UPDATE … RETURNING`. Returns 200 with the updated profile. Returns 400 when any field is missing or empty, and 404 (`NOT_FOUND`) when no `users` row exists for the caller. Idempotent: re-submission overwrites previous values and leaves `onboarding_completed = true`. |
 
-Both endpoints return `{ data: UserProfile }` on success. `UserProfile` is the shared interface exported from `@repo/types`, consumed by both `apps/services` and `apps/web`.
+All endpoints return `{ data: UserProfile }` on success. `UserProfile` is the shared interface exported from `@repo/types`, consumed by both `apps/services` and `apps/web`.
 
-The `users` module follows the same hexagonal slice pattern as other feature modules: route plugin → handler → use-case → repository interface (`IUserRepository`) + Supabase implementation (`UserDBRepository`). The repository performs a single indexed lookup on `clerk_user_id` (unique column) with no joins, satisfying the sub-200 ms response time target.
+The `users` module follows the same hexagonal slice pattern as other feature modules: route plugin → handler → use-case → repository interface (`IUserRepository`) + database implementation (`UserDBRepository`). The repository performs a single indexed lookup or update on `clerk_user_id` (unique column) with no joins.
 
 ## Profile page — `apps/web`
 
 `pages/profile/ProfilePage.tsx` is rendered at `/profile` behind `AuthGuard`. On mount it fetches the current user's profile via `useUserProfile()`, a React Query `useQuery` hook backed by `api/users.ts → fetchUserProfile`. The page renders `name`, `email`, avatar (with a fallback placeholder when `avatar_url` is `null`), `locale`, and `timezone`.
 
 A controlled form allows the user to edit `locale` and `timezone`. Submission dispatches `useUpdateProfile()`, a React Query `useMutation` backed by `patchUserProfile`. On success the cache is invalidated and a visible success indicator is shown. On error a visible error indicator is shown without mutating the displayed values.
+
+## Onboarding page — `apps/web`
+
+`pages/onboarding/OnboardingPage.tsx` is rendered at `/onboarding` behind `AuthGuard`. It displays a welcome message and a form with three text inputs for `job_role`, `company_size`, and `primary_use_case` plus a submit button. Submission calls `useCompleteOnboarding()`, a React Query `useMutation` backed by `api/users.ts → postOnboarding`. On success the hook invalidates the `['users', 'me']` cache and the page navigates to `/`. `AuthGuard` prevents authenticated users who have already completed onboarding from reaching this page (they are redirected to `/`).
 
 ## Supabase schema
 
@@ -90,7 +96,7 @@ Three tables constitute the identity persistence layer in Supabase:
 | `organizations` | `id` (uuid) | `clerk_org_id`, `slug` | Local mirror of Clerk organization records |
 | `organization_members` | `(user_id, org_id)` composite | — | Membership join table with `role` |
 
-The `users` table additionally carries `locale` (TEXT, nullable) and `timezone` (TEXT, nullable) columns added by migration `20260622000000_users_locale_timezone.sql`. Both columns default to `null`; they are the product-owned preferences editable via the profile endpoints.
+The `users` table additionally carries `locale` (TEXT, nullable) and `timezone` (TEXT, nullable) columns added by migration `20260622000000_users_locale_timezone.sql`, and `job_role` (TEXT, nullable), `company_size` (TEXT, nullable), `primary_use_case` (TEXT, nullable), and `onboarding_completed` (BOOLEAN, NOT NULL, DEFAULT FALSE) columns added by migration `20260622224341_users_onboarding_fields.sql`. The three segmentation columns are nullable (values are not validated against canonical enumerations). `onboarding_completed` is non-null with a `false` default, and is set to `true` atomically by `POST /users/me/onboarding`.
 
 `updated_at` on `users` and `organizations` is maintained automatically by a database trigger. `organization_members` has no `updated_at` column.
 

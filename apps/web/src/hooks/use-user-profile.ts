@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@clerk/clerk-react';
 import type { UserProfile } from '@repo/types';
-import { fetchUserProfile, patchUserProfile } from '../api/users';
+import { fetchUserProfile, patchUserProfile, postOnboarding } from '../api/users';
 import type { ApiError } from '../api/client';
 
 export function useUserProfile() {
@@ -44,4 +44,23 @@ export function useUpdateProfile() {
   });
 
   return { ...mutation, savedOk };
+}
+
+export function useCompleteOnboarding() {
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+
+  return useMutation<
+    UserProfile,
+    ApiError,
+    { job_role: string; company_size: string; primary_use_case: string }
+  >({
+    mutationFn: async (body) => {
+      const token = await getToken();
+      return postOnboarding(token!, body);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users', 'me'] });
+    },
+  });
 }

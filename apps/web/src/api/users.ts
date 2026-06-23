@@ -17,3 +17,15 @@ export async function patchUserProfile(
   });
   return response.data;
 }
+
+export async function postOnboarding(
+  token: string,
+  body: { job_role: string; company_size: string; primary_use_case: string },
+): Promise<UserProfile> {
+  const response = await apiFetch<{ data: UserProfile }>('/users/me/onboarding', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    token,
+  });
+  return response.data;
+}
