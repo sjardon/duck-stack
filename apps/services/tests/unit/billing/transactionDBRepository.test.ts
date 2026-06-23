@@ -1,5 +1,6 @@
 import { TransactionDBRepository } from '../../../src/modules/billing/repositories/transactionDBRepository.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
+import type { RefundEntity } from '../../../src/modules/billing/entities/refund.entity.js';
 import type { CreateTransactionData } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 
 const baseEntity: TransactionEntity = {
@@ -94,6 +95,38 @@ describe('TransactionDBRepository.findByIdempotencyKey', () => {
     const result = await repo.findByIdempotencyKey('nonexistent', 'user-001', null);
 
     expect(result).toBeNull();
+  });
+});
+
+describe('TransactionDBRepository.getRefundsByTransactionId', () => {
+  it('WHEN getRefundsByTransactionId is called THEN executes a SELECT on refunds WHERE transaction_id = $id ORDER BY created_at ASC', async () => {
+    const refundEntity: RefundEntity = {
+      id: 'refund-001',
+      transaction_id: 'uuid-001',
+      amount: 500,
+      reason: 'Customer request',
+      status: 'approved',
+      provider_refund_id: 'prov-refund-001',
+      created_at: '2026-06-23T01:00:00.000Z',
+      updated_at: '2026-06-23T01:00:00.000Z',
+    };
+
+    const { sql, mockFn } = makeSqlMock([refundEntity]);
+    const repo = new TransactionDBRepository(sql as never);
+
+    const result = await repo.getRefundsByTransactionId('uuid-001');
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([refundEntity]);
+  });
+
+  it('WHEN no refunds exist for the transaction THEN returns an empty array', async () => {
+    const { sql } = makeSqlMock([]);
+    const repo = new TransactionDBRepository(sql as never);
+
+    const result = await repo.getRefundsByTransactionId('uuid-001');
+
+    expect(result).toEqual([]);
   });
 });
 

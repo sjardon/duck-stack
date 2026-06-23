@@ -48,6 +48,7 @@ function makeRepo(overrides: Partial<ITransactionRepository> = {}): ITransaction
     updateFailureReason: jest.fn().mockResolvedValue(undefined),
     updateProviderData: jest.fn().mockResolvedValue(undefined),
     list: jest.fn().mockResolvedValue({ rows: [], nextCursor: null }),
+    getRefundsByTransactionId: jest.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

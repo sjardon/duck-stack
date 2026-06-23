@@ -129,6 +129,8 @@ Webhook endpoints are feature modules, not shared plugins. Each provider's webho
 
 **Repository pattern.** All database calls within a webhook module are centralized in a `<Provider>SyncRepository` class. Handler functions receive a repository instance via constructor injection and call typed methods (`upsertUser`, `upsertOrganization`, `createMembership`, etc.). This keeps SQL logic testable in isolation and out of handler/dispatcher code.
 
+**Atomic multi-step repository operations.** When a single business action requires multiple writes that must be observed atomically (e.g., upserting a child record and conditionally updating a parent record's status), the repository method wraps all writes in a `sql.begin(async (tx) => { ... })` block provided by `postgres.js`. The method returns a typed result struct (outcome + resolved IDs) so the caller never needs to re-query. Dispatchers and use cases receive only the outcome value — no SQL or transaction coordination logic leaks outside the repository implementation.
+
 ## Scripts
 
 | Script | Command |

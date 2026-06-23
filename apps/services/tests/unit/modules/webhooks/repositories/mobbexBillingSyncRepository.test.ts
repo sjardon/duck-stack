@@ -1,4 +1,5 @@
 import { MobbexBillingSyncRepository } from '../../../../../src/modules/webhooks/repositories/mobbexBillingSyncRepository.js';
+import type { UpsertRefundInput } from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
 
 // Helpers to build sql mocks
 
@@ -178,5 +179,183 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — failed path', 
 
     expect(result.outcome).toBe('failed');
     expect(result.transactionId).toBe('uuid-tx-001');
+  });
+});
+
+// ─── upsertRefundAndMaybeMarkTransactionRefunded ───────────────────────────
+
+// T008 — approved refund (partial): cumulative sum < transaction.amount
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — approved partial refund', () => {
+  it('WHEN refundStatus is "approved" and cumulative sum is less than transaction amount THEN returns { outcome: "refund_approved", transactionId } and does not update transactions.status', async () => {
+    const approvedTx = { id: 'uuid-tx-001', amount: 1000, status: 'approved' };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    // Call sequence inside sql.begin:
+    // 1. SELECT transaction by provider_transaction_id → [approvedTx]
+    // 2. INSERT INTO refunds ON CONFLICT DO UPDATE → []
+    // 3. SELECT SUM(amount) approved refunds → [{ total_approved: '500' }]
+    // (no UPDATE because sum < amount)
+    innerMockFn
+      .mockResolvedValueOnce([approvedTx])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ total_approved: '500' }]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const input: UpsertRefundInput = {
+      providerTransactionId: 'ptx-001',
+      providerRefundId: 'prov-refund-001',
+      amount: 500,
+      reason: null,
+      refundStatus: 'approved',
+    };
+
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+
+    expect(result.outcome).toBe('refund_approved');
+    expect(result.transactionId).toBe('uuid-tx-001');
+    // No UPDATE on transactions — only 3 inner SQL calls
+    expect(innerMockFn).toHaveBeenCalledTimes(3);
+  });
+});
+
+// T009 — full refund triggers status transition
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — full refund', () => {
+  it('WHEN cumulative approved refund amount equals transaction amount THEN updates transactions.status to "refunded" and returns { outcome: "transaction_refunded", transactionId }', async () => {
+    const approvedTx = { id: 'uuid-tx-001', amount: 1000, status: 'approved' };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    // Call sequence:
+    // 1. SELECT transaction → [approvedTx]
+    // 2. INSERT refunds ON CONFLICT → []
+    // 3. SELECT SUM → [{ total_approved: '1000' }]
+    // 4. UPDATE transactions SET status='refunded' → []
+    innerMockFn
+      .mockResolvedValueOnce([approvedTx])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ total_approved: '1000' }])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const input: UpsertRefundInput = {
+      providerTransactionId: 'ptx-001',
+      providerRefundId: 'prov-refund-001',
+      amount: 1000,
+      reason: null,
+      refundStatus: 'approved',
+    };
+
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+
+    expect(result.outcome).toBe('transaction_refunded');
+    expect(result.transactionId).toBe('uuid-tx-001');
+    // 4 inner SQL calls including the UPDATE
+    expect(innerMockFn).toHaveBeenCalledTimes(4);
+  });
+});
+
+// T010 — failed refund: no transactions.status change
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — failed refund', () => {
+  it('WHEN refundStatus is "failed" THEN upserts refund row with status "failed", does not modify transactions.status, and returns { outcome: "refund_failed", transactionId }', async () => {
+    const approvedTx = { id: 'uuid-tx-001', amount: 1000, status: 'approved' };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    // Call sequence:
+    // 1. SELECT transaction → [approvedTx]
+    // 2. INSERT refunds ON CONFLICT → []
+    // (no SUM or UPDATE because refundStatus = 'failed')
+    innerMockFn
+      .mockResolvedValueOnce([approvedTx])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const input: UpsertRefundInput = {
+      providerTransactionId: 'ptx-001',
+      providerRefundId: 'prov-refund-002',
+      amount: 500,
+      reason: 'Provider declined',
+      refundStatus: 'failed',
+    };
+
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+
+    expect(result.outcome).toBe('refund_failed');
+    expect(result.transactionId).toBe('uuid-tx-001');
+    // Only SELECT + INSERT; no SUM or UPDATE
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// T011 — transaction not found
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — transaction not found', () => {
+  it('WHEN provider_transaction_id does not match any transaction THEN no refund row is inserted and returns { outcome: "unresolved", transactionId: null }', async () => {
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    // SELECT returns empty — transaction not found
+    innerMockFn.mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const input: UpsertRefundInput = {
+      providerTransactionId: 'ptx-nonexistent',
+      providerRefundId: 'prov-refund-003',
+      amount: 500,
+      reason: null,
+      refundStatus: 'approved',
+    };
+
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+
+    expect(result.outcome).toBe('unresolved');
+    expect(result.transactionId).toBeNull();
+    // Only the SELECT was called; no INSERT
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// T012 — idempotent re-delivery
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — idempotent re-delivery', () => {
+  it('WHEN the same provider_refund_id is received twice THEN the second upsert produces no duplicate and the cumulative sum is recomputed correctly', async () => {
+    const approvedTx = { id: 'uuid-tx-001', amount: 1000, status: 'approved' };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    // First delivery: partial refund
+    innerMockFn
+      .mockResolvedValueOnce([approvedTx])  // SELECT transaction
+      .mockResolvedValueOnce([])             // UPSERT refunds
+      .mockResolvedValueOnce([{ total_approved: '500' }]); // SUM — partial
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const input: UpsertRefundInput = {
+      providerTransactionId: 'ptx-001',
+      providerRefundId: 'prov-refund-idem',
+      amount: 500,
+      reason: null,
+      refundStatus: 'approved',
+    };
+
+    const firstResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    expect(firstResult.outcome).toBe('refund_approved');
+
+    // Reset mock for second delivery
+    innerMockFn.mockReset();
+    innerMockFn
+      .mockResolvedValueOnce([approvedTx])  // SELECT transaction
+      .mockResolvedValueOnce([])             // UPSERT refunds (ON CONFLICT DO UPDATE — no duplicate)
+      .mockResolvedValueOnce([{ total_approved: '500' }]); // SUM — still partial (same refund)
+
+    const secondResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    expect(secondResult.outcome).toBe('refund_approved');
+    expect(secondResult.transactionId).toBe('uuid-tx-001');
+    // 3 inner SQL calls for the second delivery too
+    expect(innerMockFn).toHaveBeenCalledTimes(3);
   });
 });

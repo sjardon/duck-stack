@@ -87,6 +87,19 @@ export interface TransactionListResponse {
   nextCursor: string | null;
 }
 
+export type RefundStatusValue = 'pending' | 'approved' | 'failed';
+
+export interface Refund {
+  id: string;
+  transaction_id: string;
+  amount: number;
+  reason: string | null;
+  status: RefundStatusValue;
+  provider_refund_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserProfile {
   name: string;
   email: string;

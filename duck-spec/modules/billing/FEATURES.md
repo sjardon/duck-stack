@@ -191,7 +191,7 @@ Exponer un endpoint webhook seguro que reciba notificaciones de transacciones de
 
 ## BILLING-004 — Refunds Reflection (Provider-Initiated)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

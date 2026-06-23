@@ -1,4 +1,5 @@
 import type { TransactionEntity } from '../../entities/transaction.entity.js';
+import type { RefundEntity } from '../../entities/refund.entity.js';
 
 export interface CreateTransactionData {
   id: string;
@@ -34,4 +35,5 @@ export interface ITransactionRepository {
     data: { providerTransactionId: string; checkoutUrl: string },
   ): Promise<void>;
   list(query: ListTransactionsQuery): Promise<{ rows: TransactionEntity[]; nextCursor: string | null }>;
+  getRefundsByTransactionId(transactionId: string): Promise<RefundEntity[]>;
 }
