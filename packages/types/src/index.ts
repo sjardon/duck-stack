@@ -111,3 +111,18 @@ export interface UserProfile {
   primary_use_case: string | null;
   onboarding_completed: boolean;
 }
+
+export interface SubscriptionPlan {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  interval: 'month' | 'year';
+  features: string[];
+  is_active: boolean;
+  provider_plan_id: string | null;
+  created_at: string;
+  updated_at: string;
+}

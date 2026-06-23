@@ -10,7 +10,7 @@ Depende del módulo `billing` para la integración con el proveedor de pago.
 
 ## SUBS-001 — Subscription Plans Catalog
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

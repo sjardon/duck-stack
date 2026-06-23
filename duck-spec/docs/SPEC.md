@@ -62,9 +62,9 @@ See `duck-spec/modules/billing/SPEC.md` for full details.
 
 ## subscriptions
 
-**Status:** Planned — not yet implemented.
+**Status:** Plans catalog implemented (SUBS-001). Subscribe/cancel flow, lifecycle webhooks, frontend UI, and entitlement gates are planned.
 
-Five features designed: subscription plans (Supabase table + seed), subscribe/cancel flow, lifecycle webhooks (recurring payment events), frontend pricing page and billing settings, and entitlement gate (feature flags by plan). Depends on `billing` module for provider abstraction.
+The module exposes `GET /billing/plans` (no auth required), which returns the active subscription plan catalog ordered by price ascending. Plans are persisted in the `subscription_plans` Supabase table and seeded with three entries: `free` (price `0`), `pro`, and `business`. Each plan carries a nullable `provider_plan_id` for future linkage to the external payment provider. The `SubscriptionPlan` interface is published from `@repo/types` for use by both backend and frontend.
 
 See `duck-spec/modules/subscriptions/SPEC.md` for full details.
 
