@@ -129,7 +129,7 @@ Permitir que el frontend dispare un checkout one-off asociado al usuario u organ
 
 ## BILLING-003 — Payment Webhooks
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
