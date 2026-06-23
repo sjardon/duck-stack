@@ -10,6 +10,7 @@ import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
 import mobbexWebhookRoutes from './modules/webhooks/mobbex/routes.js';
 import usersRoutes from './modules/users/routes.js';
 import billingRoutes from './modules/billing/routes.js';
+import subscriptionsRoutes from './modules/subscriptions/routes.js';
 import { resolveProvider } from './modules/billing/providers/resolveProvider.js';
 
 export async function createApp(): Promise<FastifyInstance> {
@@ -35,6 +36,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await fastify.register(clerkAuthPlugin);
   await fastify.register(usersRoutes);
   await fastify.register(billingRoutes);
+  await fastify.register(subscriptionsRoutes);
   await fastify.register(healthRoutes);
 
   return fastify;
