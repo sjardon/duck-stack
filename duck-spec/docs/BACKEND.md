@@ -49,6 +49,9 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `ValidationError` | 400 | `VALIDATION_ERROR` |
 | `UnauthorizedError` | 401 | `UNAUTHORIZED` |
 | `ForbiddenError` | 403 | `FORBIDDEN` |
+| `ProviderError` | 502 or 400 | `PROVIDER_ERROR` |
+
+`ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
 `shared/plugins/error-handler.ts` intercepts `DomainError` and replies `{ code, message }` at the error's `statusCode`. Unknown errors fall through to Fastify's default handler.
 
