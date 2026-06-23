@@ -1,4 +1,4 @@
-import { MobbexProvider } from '../../../src/modules/billing/providers/MobbexProvider.js';
+import { MobbexProvider } from '../../../src/modules/billing/providers/mobbexProvider.js';
 import { ProviderError } from '../../../src/shared/errors.js';
 import type { CheckoutInput } from '@repo/types';
 

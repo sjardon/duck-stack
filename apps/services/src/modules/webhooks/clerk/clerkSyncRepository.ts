@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import { logger } from '../../../shared/infrastructure/logger.js';
 
 export interface UpsertUserData {
   clerkUserId: string;
@@ -49,9 +50,7 @@ export class ClerkSyncRepository {
       SELECT id FROM users WHERE clerk_user_id = ${data.clerkUserId} LIMIT 1`;
 
     if (userRows.length === 0) {
-      console.warn(
-        `[ClerkSyncRepository] createMembership: user with clerk_user_id="${data.clerkUserId}" not found; skipping membership insert (EC005)`,
-      );
+      logger.warn({ clerkUserId: data.clerkUserId }, 'createMembership: user not found; skipping membership insert (EC005)');
       return;
     }
 
@@ -60,9 +59,7 @@ export class ClerkSyncRepository {
       SELECT id FROM organizations WHERE clerk_org_id = ${data.clerkOrgId} LIMIT 1`;
 
     if (orgRows.length === 0) {
-      console.warn(
-        `[ClerkSyncRepository] createMembership: organization with clerk_org_id="${data.clerkOrgId}" not found; skipping membership insert (EC005)`,
-      );
+      logger.warn({ clerkOrgId: data.clerkOrgId }, 'createMembership: organization not found; skipping membership insert (EC005)');
       return;
     }
 

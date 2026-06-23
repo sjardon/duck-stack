@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../../shared/infrastructure/db.js';
-import { UserDBRepository } from '../repositories/UserDBRepository.js';
-import { GetUserProfileUseCase } from '../useCases/GetUserProfileUseCase.js';
+import { UserDBRepository } from '../repositories/userDBRepository.js';
+import { GetUserProfileUseCase } from '../useCases/getUserProfileUseCase.js';
 
 export async function getUserProfileHandler(
   request: FastifyRequest,

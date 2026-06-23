@@ -1,5 +1,5 @@
 import type { UserProfile } from '@repo/types';
-import { CompleteOnboardingUseCase } from '../../../src/modules/users/useCases/CompleteOnboardingUseCase.js';
+import { CompleteOnboardingUseCase } from '../../../src/modules/users/useCases/completeOnboardingUseCase.js';
 import { NotFoundError } from '../../../src/shared/errors.js';
 
 const onboardingData = {

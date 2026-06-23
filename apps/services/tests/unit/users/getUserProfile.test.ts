@@ -1,6 +1,6 @@
 import type { UserProfile } from '@repo/types';
-import { UserDBRepository } from '../../../src/modules/users/repositories/UserDBRepository.js';
-import { GetUserProfileUseCase } from '../../../src/modules/users/useCases/GetUserProfileUseCase.js';
+import { UserDBRepository } from '../../../src/modules/users/repositories/userDBRepository.js';
+import { GetUserProfileUseCase } from '../../../src/modules/users/useCases/getUserProfileUseCase.js';
 
 // T001: schema-level contract check — findByClerkUserId returns onboarding columns
 describe('UserDBRepository.findByClerkUserId — onboarding columns', () => {

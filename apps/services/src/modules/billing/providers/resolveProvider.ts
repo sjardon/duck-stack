@@ -1,5 +1,5 @@
 import type { PaymentProvider } from '@repo/types';
-import { MobbexProvider } from './MobbexProvider.js';
+import { MobbexProvider } from './mobbexProvider.js';
 
 // Singleton — set once at first call; runtime env changes are ignored (EC004)
 let cachedProvider: PaymentProvider | undefined;
