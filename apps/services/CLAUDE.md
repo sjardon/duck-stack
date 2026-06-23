@@ -14,7 +14,7 @@ Handler → UseCase → IRepository (implemented by) Repository
 
 **`src/modules/<domain>/`** — one module per domain (auth, billing, subscriptions, etc). Each module contains:
 - `routes.ts` — entry routes for each feature. Validates input data, enforces API contracts, implements security guards, etc. **Must be registered in `src/app.ts` as a Fastify plugin.**
-- `handlers/<feature>Handler.ts` — entry point; only instantiates repos and injects them into the UseCase. Create the UseCase in build time, not running time. No business logic. One handler per feature (createUserHandler, updateUserHandler, paymentCheckoutHandler).
+- `handlers/<feature>Handler.ts` — entry point; only instantiates repos and injects them into the UseCase. Create the UseCase out of the scope of the function / method, but in the same file. No business logic. One handler per feature (createUserHandler, updateUserHandler, paymentCheckoutHandler).
 - `useCases/<feature>UseCase.ts` — pure business logic, no framework or concrete service dependencies. Use cases must never be consumed by other use cases under any circumstance. They only consume repositories. One use case per feature (createUserUseCase.ts, updateUserUseCase.ts, paymentCheckoutUseCase.ts).
 - `repositories/<entity>Repository.ts` — adapters to external services (HTTP, DynamoDB, S3). Declared per module. If two or more modules can share a repository, it goes in `src/shared/repositories/`. One repository per entity and data source (usersRepository.ts, usersCacheRepository.ts, usersEventsRepository.ts).
 - `repositories/interfaces/<entity>Repository.ts` — repository contracts; Use Cases depend on these interfaces, not on implementations.
@@ -25,15 +25,22 @@ Handler → UseCase → IRepository (implemented by) Repository
 
 **`tests/unit/`** — unit tests in Jest. Interface mocks in `tests/mocks/`. Structure test following the same path that the file that is tested, in example, FOR: `src/modules/billing/providers/mobbexProvider.ts` set its tests in `tests/unit/modules/billing/providers/mobbexProvider.test.ts` 
 
-## Coding conventions
+## Coding practices
 
+**Apply Clean Code principles**
+**Apply SOLID principles**
 **Use raw SQL for all database queries:** Use `postgres.js` tagged-template queries directly. Do not introduce ORMs, query builders, or other SQL abstraction libraries.
 **Use camel case starting with lower case for file names**: DO: completeOnboardingUseCase.ts, getUserProfileUseCase.ts. DONOT: completeOnboarding.use-case.ts, GetUserProfileUseCase.ts.
 **DONOT use concrete architecture names, use abstract names instead**: DONOT: UserSupabaseRepository, AuthSnsRepository, CreateClerkUserUseCase. DO: UserDBRepository, AuthEventRepository, CreateUserUseCase.
-**Apply Clean Code principles**
-**Apply SOLID principles**
+
+## Comments
+
 **Comments must be small**
 **Add comments only when necessary:** For understanding the domain logic or complex technical decisions.
+
+## Logging
+
+**Use logger from `src/shared/infrastructure/logger.ts`**
 **Add smart logs:** 
 - Structured logging: consistent field names: timestamp, level, message, requestId, userId, duration
 - What to log: Request in / response out (at the boundary); External calls (DB, HTTP, queue) with latency; Business-significant state transitions; All errors with stack traces
@@ -41,3 +48,18 @@ Handler → UseCase → IRepository (implemented by) Repository
 - Enables reconstructing a full trace across services
 - Include relevant IDs: "Payment failed" { userId, orderId, reason }
 - Past tense for completed events: "User created"
+
+## Config
+
+**Add config files in `src/shared/configs/<scope>Config.ts`** 
+**DONOT use the environment variables directly in the code**
+**Use this structure for config files**
+```ts
+const env = process.env || {};
+
+export const serviceConfig = {
+    env: env.NODE_ENV,
+    shortEnv: env.SHORT_ENV,
+    selfUrl: env.SELF_URL || 'https://url.example.com/api'
+};
+```
