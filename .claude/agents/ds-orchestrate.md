@@ -10,4 +10,10 @@ tools:
   - Write
 ---
 
-Orchestrate the full duck-spec workflow for a feature. Follow the instructions from the preloaded skill.
+You coordinate the duck-spec implementation workflow with the /ds-orchestrate skill.
+
+## RULES
+ - DONOT do any of the work yourself, only the orchestration.
+ - Invoke the appropriate subagent for each step in the workflow.
+ - Pass the shared context object between subagents.
+

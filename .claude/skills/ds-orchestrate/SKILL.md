@@ -5,7 +5,7 @@ description: Orchestrates the full duck-spec workflow for a feature from FEATURE
 
 # Duck-Spec Orchestrator
 
-You coordinate the duck-spec implementation workflow. You do NOT implement anything — you invoke agents in order, pass the shared context object between them, and handle retries and failures.
+You coordinate the duck-spec implementation workflow. You do NOT implement anything — you MUST invoke subagents in order for each step, pass the shared context object between them, and handle retries and failures. DONOT do any of the work yourself, only the orchestration.
 
 ## Input
 
@@ -53,7 +53,7 @@ Output this checklist after each step and mark `[x]` as steps complete:
 
 ### Step 1 — Branch creation (MANDATORY)
 
-Invoke: **ds-integrate** — operation `CREATE_BRANCH`
+Invoke: **ds-integrate** agent — operation `CREATE_BRANCH`
 
 Pass:
 ```json
@@ -68,7 +68,7 @@ Update `lastStep` to `"branch"`.
 
 ### Step 2 — Analysis (MANDATORY)
 
-Invoke: **ds-analysis**
+Invoke: **ds-analysis** agent
 
 Pass the current context. ds-analysis reads the feature from `duck-spec/modules/<module>/FEATURES.md`, produces `duck-spec/modules/<module>/<feature-dir>/analysis.md`, and returns the updated context with `effort` set.
 
@@ -78,7 +78,7 @@ Update `lastStep` to `"analysis"`.
 
 ### Step 3 — Design (MANDATORY)
 
-Invoke: **ds-design**
+Invoke: **ds-design** agent
 
 Pass the current context. ds-design reads `analysis.md`, evaluates at least three solution alternatives, chooses one, and produces:
 - `duck-spec/modules/<module>/<feature-dir>/design.md` — technical design, contracts, files to modify
@@ -90,7 +90,7 @@ Update `lastStep` to `"design"`.
 
 ### Step 4 — Implementation (MANDATORY)
 
-Invoke: **ds-implement**
+Invoke: **ds-implement** agent
 
 Pass the current context. ds-implement reads `analysis.md`, `design.md`, and `tasks.md` and implements all tasks.
 
@@ -105,7 +105,7 @@ Update `lastStep` to `"implement"`.
 
 ### Step 5 — Review (MANDATORY, with retry)
 
-Invoke: **ds-review**
+Invoke: **ds-review** agent
 
 Pass the current context. ds-review runs in two phases:
 
@@ -133,7 +133,7 @@ ds-review returns:
 
 ### Step 6 — Docs (MANDATORY)
 
-Invoke: **ds-docs**
+Invoke: **ds-docs** agent
 
 Pass the current context. ds-docs reads `analysis.md` and `design.md` and updates the relevant global documentation files based on what was actually built (ARCHITECTURE.md, BACKEND.md, DOMAIN.md, FEATURES.md status, etc.).
 
@@ -141,7 +141,7 @@ Update `lastStep` to `"docs"`.
 
 ### Step 7 — Integrate (MANDATORY)
 
-Invoke: **ds-integrate** — operation `CREATE_MR`
+Invoke: **ds-integrate** agent — operation `CREATE_MR`
 
 Pass the current context. ds-integrate creates an MR in GitHub with all changes from the feature branch.
 
@@ -149,9 +149,13 @@ Update `lastStep` to `"integrate"`.
 
 ## Rules
 
+## RULES
+
+- Invoke the appropriate agent for each step in the workflow.
+- Do not read the subagents skill files — only invoke them with the current context.
 - Each agent invocation MUST include only its own skill file — do not attach other skill files.
 - Never skip a step, even if it seems unnecessary.
-- Never implement anything yourself — coordinate only.
+- Never implement anything or do the work yourself — coordinate only.
 - Always pass the full context object to each agent and update it with the returned values before the next invocation.
 - If the user resumes a failed run, read `lastStep` from the context and skip already-completed steps.
 - Errors from agents must be surfaced to the user verbatim before stopping.

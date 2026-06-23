@@ -53,7 +53,7 @@ Import direction is enforced by convention: `api` → `hooks` → `pages` → `c
 
 All HTTP calls from `apps/web` go through `apiFetch<T>(path, options?)` in `api/client.ts`. The function resolves the base URL from `VITE_API_URL` and attaches an `Authorization: Bearer` header when `options.token` is supplied. When no token is present the header is omitted rather than throwing, so the client is usable before auth is implemented. Non-2xx responses throw a typed `ApiError` (message + status).
 
-Individual endpoint modules (e.g. `api/health.ts`) call `apiFetch` and are in turn consumed only by hooks — never by components or pages directly.
+Individual endpoint modules call `apiFetch` and are in turn consumed only by hooks — never by components or pages directly. Domain modules that require an auth token pass it explicitly as the first argument (e.g. `createCheckout(token, body)`). `api/billing.ts` exports `createCheckout`, `getTransaction`, and `listTransactions`, each accepting a bearer token and returning typed responses using `@repo/types` (`Transaction`, `TransactionListResponse`).
 
 ## `apps/web` — Auth conventions
 

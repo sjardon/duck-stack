@@ -53,6 +53,40 @@ export interface PaymentProvider {
   ): Promise<WebhookEvent>;
 }
 
+export type TransactionStatusValue = 'pending' | 'approved' | 'failed' | 'refunded';
+
+export interface Transaction {
+  id: string;
+  user_id: string | null;
+  org_id: string | null;
+  provider: string;
+  provider_transaction_id: string | null;
+  amount: number;
+  currency: string;
+  status: TransactionStatusValue;
+  description: string;
+  reference: string;
+  idempotency_key: string | null;
+  metadata: Record<string, unknown> | null;
+  failure_reason: string | null;
+  checkout_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCheckoutInput {
+  amount: number;
+  currency: string;
+  description: string;
+  items?: unknown[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface TransactionListResponse {
+  data: Transaction[];
+  nextCursor: string | null;
+}
+
 export interface UserProfile {
   name: string;
   email: string;
