@@ -39,9 +39,11 @@ apps/services/
 
 ### Logging
 
-Fastify's built-in Pino logger uses pretty-print formatting (`pino-pretty`) when `NODE_ENV` is not `production`, and structured JSON otherwise. The log level is controlled by `LOG_LEVEL` (default `info`). Every HTTP request receives a unique UUID via `genReqId`, and that `reqId` appears in every request-scoped log line for end-to-end traceability.
+Fastify's built-in Pino logger uses pretty-print formatting (`pino-pretty`) when `NODE_ENV` is not `production`, and structured JSON otherwise. The log level is controlled by `LOG_LEVEL` (default `info`). Every HTTP request receives a unique UUID via `genReqId`.
 
-A standalone `pino()` instance is exported from `shared/infrastructure/logger.ts` with the same level and transport configuration, for use outside the Fastify request context (use cases, repositories).
+A single static `pino()` instance is exported from `shared/infrastructure/logger.ts` and is the only shared logger in the application. Repositories, use cases, and webhook dispatchers all emit logs through this static logger — no per-request child loggers or additional instances exist.
+
+`requestId` is automatically injected into every log line emitted during the lifecycle of a request via a Pino `mixin` backed by `AsyncLocalStorage` (SERVICES-005). A Fastify `onRequest` hook in `app.ts` stores `{ requestId: request.id }` in an `AsyncLocalStorage` instance exported from `shared/infrastructure/requestContext.ts`; the `mixin` reads this store on every log call and merges `{ requestId }` into the output. When the store is unset (server bootstrap, DB wiring, provider factory initialization), the mixin returns `{}` and `requestId` is omitted from the log line, preserving pre-request behavior unchanged. `AsyncLocalStorage` propagates the store through async boundaries (`await`, `setImmediate`, `setTimeout`, DB driver callbacks) so the correct `requestId` is present throughout the full async chain of a request, including across concurrent in-flight requests.
 
 ### Domain error model
 

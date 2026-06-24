@@ -44,16 +44,20 @@ This rule lets the underlying provider change without a rename cascade and keeps
 
 ## Logging strategy
 
-| Context | Instance | Format |
-|---------|----------|--------|
-| HTTP requests | Fastify built-in logger | `pino-pretty` in dev; JSON in production |
-| Non-request code | `shared/infrastructure/logger.ts` standalone pino | Same level and transport |
+The static Pino logger exported from `shared/infrastructure/logger.ts` is the only shared logger instance in the application. There is no separate Fastify-bound logger for request code and no per-request child logger. Repositories, use cases, and webhook dispatchers all import and call this single instance directly.
+
+| Context | Logger | Format |
+|---------|--------|--------|
+| HTTP requests | `shared/infrastructure/logger.ts` static Pino | `pino-pretty` in dev; JSON in production |
+| Non-request code | `shared/infrastructure/logger.ts` static Pino | Same level and transport |
 
 Every request gets a UUID via `genReqId`. `LOG_LEVEL` env var controls level (default `info`).
 
+`requestId` is injected automatically into every log line emitted during an HTTP request via a Pino `mixin` backed by `AsyncLocalStorage`. A global `onRequest` hook in `app.ts` stores `{ requestId: request.id }` in the `AsyncLocalStorage` singleton exported from `shared/infrastructure/requestContext.ts`. The `mixin` on the static logger reads this store on every log call: when the store is set it merges `{ requestId }` into the output; when unset (server bootstrap, DB wiring, provider initialization) it returns `{}` and `requestId` is omitted. `AsyncLocalStorage` propagates the store through all async continuations of a request, guaranteeing correct `requestId` tagging across `await` chains, `setImmediate`, `setTimeout`, and DB driver callbacks. Concurrent requests are fully isolated — each `asyncLocalStorage.run` call creates an independent async context.
+
 ### Operational rules
 
-- Use the logger from `src/shared/infrastructure/logger.ts` outside the request scope; inside a request use the Fastify-bound logger so the `requestId` is included automatically.
+- Use the static logger from `src/shared/infrastructure/logger.ts` everywhere — both inside and outside a request scope. Do not pass a logger by parameter to use cases, repositories, or dispatchers.
 - Structured logging only. Stable field names: `timestamp`, `level`, `message`, `requestId`, `userId`, `duration`.
 - Log: request in / response out at the boundary; external calls (DB, HTTP, queue) with their latency; business-significant state transitions; every error with its stack.
 - Do NOT log: secrets, tokens, passwords, PII (GDPR/compliance); high-frequency trivial events inside tight loops; data already present in the request context.
