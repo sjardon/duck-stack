@@ -59,7 +59,7 @@ Definir el modelo de plan, su persistencia, los seeds iniciales (free, pro, busi
 
 ## SUBS-002 — Subscribe & Cancel Flow
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

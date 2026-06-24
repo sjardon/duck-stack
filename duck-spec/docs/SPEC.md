@@ -62,9 +62,9 @@ See `duck-spec/modules/billing/SPEC.md` for full details.
 
 ## subscriptions
 
-**Status:** Plans catalog implemented (SUBS-001). Subscribe/cancel flow, lifecycle webhooks, frontend UI, and entitlement gates are planned.
+**Status:** Plans catalog implemented (SUBS-001). Subscribe/cancel flow implemented (SUBS-002). Lifecycle webhooks, frontend UI, and entitlement gates are planned.
 
-The module exposes `GET /billing/plans` (no auth required), which returns the active subscription plan catalog ordered by price ascending. Plans are persisted in the `subscription_plans` Supabase table and seeded with three entries: `free` (price `0`), `pro`, and `business`. Each plan carries a nullable `provider_plan_id` for future linkage to the external payment provider. The `SubscriptionPlan` interface is published from `@repo/types` for use by both backend and frontend.
+The module exposes `GET /billing/plans` (no auth required), which returns the active subscription plan catalog ordered by price ascending. Plans are persisted in the `subscription_plans` Supabase table and seeded with three entries: `free` (price `0`), `pro`, and `business`. Each plan carries a nullable `provider_plan_id` for linkage to the external payment provider. Three authenticated endpoints manage the subscription lifecycle: `POST /billing/subscriptions` creates a subscription for the scope (short-circuiting provider calls for the free plan and returning a `checkoutUrl` for paid plans), `POST /billing/subscriptions/:id/cancel` cancels a subscription immediately or at period end, and `GET /billing/subscriptions/me` returns the current non-terminal subscription or `null`. Subscriptions are persisted in the `subscriptions` Supabase table; partial unique indexes enforce at most one active subscription per scope. Provider interaction goes through the abstract billing port (`resolveProvider()`). Shared types `SubscriptionPlan`, `Subscription`, `CreateSubscriptionInput`, `CancelSubscriptionInput`, and `SubscriptionStatusValue` are published from `@repo/types`.
 
 See `duck-spec/modules/subscriptions/SPEC.md` for full details.
 
