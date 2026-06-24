@@ -13,6 +13,7 @@ import billingRoutes from './modules/billing/routes.js';
 import subscriptionsRoutes from './modules/subscriptions/routes.js';
 import { resolveProvider } from './modules/billing/providers/resolveProvider.js';
 import { serverConfig } from './shared/configs/serverConfig.js';
+import { requestContext } from './shared/infrastructure/requestContext.js';
 
 export async function createApp(): Promise<FastifyInstance> {
   // Fail fast on misconfigured payment provider before the HTTP server starts
@@ -27,6 +28,10 @@ export async function createApp(): Promise<FastifyInstance> {
           : undefined,
     },
     genReqId: () => crypto.randomUUID(),
+  });
+
+  fastify.addHook('onRequest', (request, _reply, done) => {
+    requestContext.run({ requestId: request.id }, done);
   });
 
   await fastify.register(errorHandlerPlugin);

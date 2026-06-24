@@ -193,45 +193,58 @@ Que todos los archivos de `apps/services/src/` cumplan la regla de naming camelC
 
 ---
 
-## SERVICES-005 — Propagate request-bound logger across module layers
+## SERVICES-005 — Propagate request-bound logging context via AsyncLocalStorage
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
-`duck-spec/docs/BACKEND.md` establece que dentro del scope de un request hay que usar el logger Fastify-bound, de modo que el `requestId` quede incluido automáticamente en cada línea de log, y que sólo fuera del scope de request se debe usar el logger Pino estático de `src/shared/infrastructure/logger.ts`. Hoy esta regla sólo se respeta en `modules/webhooks/mobbex/routes.ts`. Los repositorios (`TransactionDBRepository`, `MobbexBillingSyncRepository`, `ClerkSyncRepository`, `UserDBRepository`, `SubscriptionPlanDBRepository`) y los use cases del módulo `billing` importan el logger estático, por lo que las líneas de log que emiten durante un request (incluida la latencia de las queries) no incluyen `requestId` y no se pueden correlacionar con la traza del request original.
+`duck-spec/docs/BACKEND.md` establece que toda línea de log emitida durante el ciclo de vida de un request debe incluir el `requestId` para poder correlacionar trazas. Hoy, los repositorios (`TransactionDBRepository`, `MobbexBillingSyncRepository`, `ClerkSyncRepository`, `UserDBRepository`, `SubscriptionPlanDBRepository`), los use cases del módulo `billing` y los dispatchers de webhooks importan el logger Pino estático de `src/shared/infrastructure/logger.ts` y emiten sus logs a través de él. Como ese logger no conoce el contexto del request, las líneas de log emitidas durante un request (latencia de queries, warnings de negocio, outcomes de transacciones y refunds) no incluyen `requestId` y quedan desconectadas de la traza del request original. La única ruta que cumple la regla hoy es `modules/webhooks/mobbex/routes.ts`, que loggea directamente con `request.log`.
 
 ### Objetivo
 
-Que toda línea de log emitida durante el ciclo de vida de un request incluya el `requestId`, propagando el logger Fastify-bound desde el handler hacia los use cases y los repositorios.
+Que toda línea de log emitida durante el ciclo de vida de un request incluya el `requestId`, sin modificar la firma de use cases, repositorios ni dispatchers, y manteniendo intacto el comportamiento de los logs emitidos fuera del scope de un request.
 
 ### Requerimientos funcionales
 
-- Los handlers Fastify proveen el logger del request al use case que ejecutan
-- Los use cases que se invocan desde un request usan el logger recibido y se lo pasan al repositorio
-- Los repositorios usados dentro del scope de un request usan el logger recibido para emitir métricas de latencia y warnings de negocio
-- Los dispatchers de eventos de webhook (Clerk, Mobbex) propagan el logger del request al repositorio que invocan
-- Toda línea de log emitida durante el procesamiento de un request incluye el campo `requestId`
-- El comportamiento de logging fuera del scope del request (arranque, conexión inicial a base, factory de proveedor) no cambia: sigue usando el logger Pino estático
-
-### Fuera de scope
-
-- Cambios al formato de los mensajes de log o al schema de campos estructurados
-- Cambios al nivel de log (`info`, `warn`, etc.) en líneas existentes
-- Agregar logs nuevos en lugares que hoy no logean
-- Introducir un sistema de tracing distribuido (OpenTelemetry, etc.)
-- Cambios en el transporte de logs (`pino-pretty` vs JSON)
+- Toda línea de log emitida durante el procesamiento de un request HTTP incluye el campo `requestId`
+- El `requestId` incluido en los logs coincide con el ID que Fastify asigna al request (`request.id`)
+- El comportamiento de logging fuera del scope de un request (arranque del servidor, wiring inicial de DB, factory de proveedor de pagos) no cambia: la línea de log no incluye `requestId`
+- Los repositorios, use cases y dispatchers siguen emitiendo logs a través del logger Pino estático de `shared/infrastructure/logger.ts` — no se modifica ninguna firma de método ni de función
+- Los logs emitidos por dos requests concurrentes no se mezclan: cada línea lleva el `requestId` del request que la originó
+- El texto, nivel y campos estructurados de cada línea de log existente se preservan idénticos tras el cambio
 
 ### Requerimientos no funcionales
 
-- La interfaz del logger inyectado debe ser compatible con la interfaz de Pino que ya se usa, para evitar reescribir las llamadas existentes
-- La inyección no debe forzar a los use cases a depender de tipos específicos de Fastify si se puede usar el tipo base de Pino
+- El logger Pino estático sigue siendo la única instancia compartida; no se introducen child loggers ni instancias adicionales por request
+- No se introducen dependencias externas nuevas — sólo `node:async_hooks` (built-in de Node.js) y la API `mixin` de Pino, ya disponible en la versión usada
+
+### Fuera de scope
+
+- Modificar firmas de métodos de use cases, repositorios o dispatchers para recibir un logger por parámetro
+- Cambios al texto, al nivel o al schema de campos estructurados de los logs existentes
+- Agregar logs nuevos en lugares que hoy no logean
+- Introducir un sistema de tracing distribuido (OpenTelemetry, etc.)
+- Cambios en el transporte de logs (`pino-pretty` vs JSON)
+- Propagar campos de contexto distintos a `requestId` (tenantId, userId, etc.)
 
 ### Edge cases
 
-- Código compartido invocado tanto desde un request como desde fuera (p.ej. una utilidad usada en arranque y también en handlers) debe permitir ambos modos sin duplicar implementación
-- Errores que ocurren antes de que el handler tenga la chance de pasar el logger (p.ej. fallas en parsing) deben seguir siendo capturados por el error handler global con el logger correcto
-- Tests unitarios deben poder inyectar un logger fake sin depender de Fastify
+- Dos requests concurrentes en vuelo simultáneo no deben compartir ni filtrar `requestId` entre sí
+- Código que cruza fronteras async (`await`, `setImmediate`, `setTimeout`, callbacks de drivers de DB) debe preservar el `requestId` del request original a lo largo de toda la cadena
+- Errores anteriores al handler (fallas de parsing, validación de schema, verificación de firma de webhook) deben seguir siendo capturados por el error handler global y emitir el log con el `requestId` del request
+- Logs emitidos en código compartido entre request y no-request (utilidades reusadas en arranque y en handlers) deben incluir `requestId` cuando se ejecuta dentro del request y omitirlo cuando se ejecuta fuera, sin duplicar implementación
+
+### Technical constraints
+
+- El contexto del request se almacena en una instancia de `AsyncLocalStorage` de `node:async_hooks`
+- El store se popula en un hook `onRequest` de Fastify, envolviendo el resto del ciclo de vida del request en `asyncLocalStorage.run(...)` con `{ requestId: request.id }`
+- El logger Pino estático de `shared/infrastructure/logger.ts` se configura con un `mixin` que lee el store en cada línea de log y, si existe, mergea `{ requestId }` en el output
+- Cuando el store está vacío (código que corre fuera del scope de un request), el mixin retorna `{}` y `requestId` se omite, preservando el comportamiento actual
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` (sección **Logging strategy**, líneas 47–56): la tabla "HTTP requests → Fastify built-in logger / Non-request code → standalone pino" y la regla "inside a request use the Fastify-bound logger so the `requestId` is included automatically" quedan desactualizadas con este cambio. El paso de `ds-docs` debe refrescar ambas para reflejar que el logger estático de `shared/infrastructure/logger.ts` es ahora la única instancia, y que `requestId` se inyecta automáticamente vía un mixin Pino respaldado por `AsyncLocalStorage` cuando se ejecuta dentro del scope de un request.
 
 ### Dependencias
 
