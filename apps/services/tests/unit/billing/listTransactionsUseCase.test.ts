@@ -2,6 +2,21 @@ import { ListTransactionsUseCase } from '../../../src/modules/billing/useCases/l
 import { ValidationError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 const baseEntity: TransactionEntity = {
   id: 'uuid-001',
@@ -37,15 +52,19 @@ describe('ListTransactionsUseCase — basic listing without cursor (R009)', () =
   it('WHEN called without cursor THEN calls repo.list with correct userId/orgId and default limit 20', async () => {
     const repo = makeRepo({ rows: [baseEntity], nextCursor: null });
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute('user-001', null, { limit: 20 });
+    const result = await useCase.execute('user-001', null, { limit: 20 }, fakeLogger);
 
-    expect(repo.list).toHaveBeenCalledWith({
-      userId: 'user-001',
-      orgId: null,
-      limit: 20,
-      cursor: undefined,
-    });
+    expect(repo.list).toHaveBeenCalledWith(
+      {
+        userId: 'user-001',
+        orgId: null,
+        limit: 20,
+        cursor: undefined,
+      },
+      fakeLogger,
+    );
     expect(result.data).toEqual([baseEntity]);
     expect(result.nextCursor).toBeNull();
   });
@@ -55,14 +74,16 @@ describe('ListTransactionsUseCase — cursor-based pagination (NF003)', () => {
   it('WHEN valid cursor provided THEN calls repo.list with the decoded cursor', async () => {
     const repo = makeRepo({ rows: [baseEntity], nextCursor: null });
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
     const cursorPayload = JSON.stringify({ created_at: '2026-06-22T00:00:00.000Z', id: 'uuid-002' });
     const cursor = Buffer.from(cursorPayload).toString('base64');
 
-    await useCase.execute('user-001', null, { limit: 20, cursor });
+    await useCase.execute('user-001', null, { limit: 20, cursor }, fakeLogger);
 
     expect(repo.list).toHaveBeenCalledWith(
       expect.objectContaining({ cursor }),
+      fakeLogger,
     );
   });
 
@@ -71,8 +92,9 @@ describe('ListTransactionsUseCase — cursor-based pagination (NF003)', () => {
     const encodedCursor = Buffer.from(JSON.stringify({ created_at: '2026-06-21T00:00:00.000Z', id: 'uuid-002' })).toString('base64');
     const repo = makeRepo({ rows, nextCursor: encodedCursor });
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute('user-001', null, { limit: 20 });
+    const result = await useCase.execute('user-001', null, { limit: 20 }, fakeLogger);
 
     expect(result.nextCursor).not.toBeNull();
   });
@@ -85,20 +107,22 @@ describe('ListTransactionsUseCase — malformed cursor (EC007)', () => {
     // We pass an invalid base64 that decodes to non-JSON
     (repo.list as jest.Mock).mockRejectedValue(new ValidationError('Invalid cursor'));
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
     const badCursor = '!!!not-valid-base64!!!';
 
-    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor })).rejects.toThrow(ValidationError);
+    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor }, fakeLogger)).rejects.toThrow(ValidationError);
   });
 
   it('WHEN cursor decodes to invalid JSON THEN throws ValidationError (400)', async () => {
     const repo = makeRepo({ rows: [], nextCursor: null });
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
     // Valid base64 but not valid cursor JSON structure
     const badCursor = Buffer.from('not-json').toString('base64');
 
-    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor })).rejects.toThrow(ValidationError);
+    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor }, fakeLogger)).rejects.toThrow(ValidationError);
   });
 });
 
@@ -106,11 +130,13 @@ describe('ListTransactionsUseCase — org-scoped filtering (EC005)', () => {
   it('WHEN orgId is non-null THEN passes orgId to repo.list for org-scoped filtering', async () => {
     const repo = makeRepo({ rows: [], nextCursor: null });
     const useCase = new ListTransactionsUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    await useCase.execute('user-001', 'org-001', { limit: 20 });
+    await useCase.execute('user-001', 'org-001', { limit: 20 }, fakeLogger);
 
     expect(repo.list).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: 'org-001' }),
+      fakeLogger,
     );
   });
 });

@@ -1,5 +1,5 @@
 import type { Sql } from 'postgres';
-import { logger } from '../../../shared/infrastructure/logger.js';
+import type { BaseLogger } from 'pino';
 
 export interface UpsertUserData {
   clerkUserId: string;
@@ -23,7 +23,7 @@ export interface CreateMembershipData {
 export class ClerkSyncRepository {
   constructor(private readonly sql: Sql) {}
 
-  async upsertUser(data: UpsertUserData): Promise<void> {
+  async upsertUser(data: UpsertUserData, logger: BaseLogger): Promise<void> {
     const start = Date.now();
     await this.sql`
       INSERT INTO users (clerk_user_id, email, name, avatar_url)
@@ -35,7 +35,7 @@ export class ClerkSyncRepository {
     logger.info({ duration: Date.now() - start }, 'ClerkSyncRepository.upsertUser');
   }
 
-  async upsertOrganization(data: UpsertOrganizationData): Promise<void> {
+  async upsertOrganization(data: UpsertOrganizationData, logger: BaseLogger): Promise<void> {
     const start = Date.now();
     await this.sql`
       INSERT INTO organizations (clerk_org_id, name, slug)
@@ -46,7 +46,7 @@ export class ClerkSyncRepository {
     logger.info({ duration: Date.now() - start }, 'ClerkSyncRepository.upsertOrganization');
   }
 
-  async createMembership(data: CreateMembershipData): Promise<void> {
+  async createMembership(data: CreateMembershipData, logger: BaseLogger): Promise<void> {
     // Resolve local user UUID from clerk_user_id
     const userStart = Date.now();
     const userRows = await this.sql<Array<{ id: string }>>`

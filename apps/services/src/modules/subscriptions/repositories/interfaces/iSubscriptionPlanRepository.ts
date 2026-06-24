@@ -1,5 +1,6 @@
+import type { BaseLogger } from 'pino';
 import type { SubscriptionPlanEntity } from '../../entities/subscriptionPlanEntity.js';
 
 export interface ISubscriptionPlanRepository {
-  listActive(): Promise<SubscriptionPlanEntity[]>;
+  listActive(logger: BaseLogger): Promise<SubscriptionPlanEntity[]>;
 }

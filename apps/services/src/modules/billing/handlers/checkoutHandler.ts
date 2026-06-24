@@ -24,6 +24,7 @@ export async function checkoutHandler(request: FastifyRequest, reply: FastifyRep
     request.orgId ?? null,
     parsed.data,
     idempotencyKey,
+    request.log,
   );
 
   return reply.send(result);

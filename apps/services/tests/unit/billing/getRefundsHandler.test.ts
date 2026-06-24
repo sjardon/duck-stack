@@ -27,6 +27,7 @@ function makeRequest(id: string, userId = 'user-001', orgId: string | null = nul
     params: { id },
     userId,
     orgId,
+    log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
   } as unknown as FastifyRequest;
 }
 
@@ -85,6 +86,6 @@ describe('getRefundsHandler — success reply shape', () => {
 
     await getRefundsHandler(request, reply);
 
-    expect(mockExecLocal).toHaveBeenCalledWith('uuid-002', 'user-002', null);
+    expect(mockExecLocal).toHaveBeenCalledWith('uuid-002', 'user-002', null, expect.anything());
   });
 });

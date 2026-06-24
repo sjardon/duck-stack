@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import type { BaseLogger } from 'pino';
 import type { TransactionEntity } from '../entities/transactionEntity.js';
 import type { RefundEntity } from '../entities/refundEntity.js';
 import type {
@@ -6,12 +7,11 @@ import type {
   CreateTransactionData,
   ListTransactionsQuery,
 } from './interfaces/iTransactionRepository.js';
-import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class TransactionDBRepository implements ITransactionRepository {
   constructor(private readonly sql: Sql) {}
 
-  async create(input: CreateTransactionData): Promise<TransactionEntity> {
+  async create(input: CreateTransactionData, logger: BaseLogger): Promise<TransactionEntity> {
     const start = Date.now();
     const rows = await this.sql<TransactionEntity[]>`
       INSERT INTO transactions (
@@ -39,7 +39,7 @@ export class TransactionDBRepository implements ITransactionRepository {
     return rows[0];
   }
 
-  async findById(id: string): Promise<TransactionEntity | null> {
+  async findById(id: string, logger: BaseLogger): Promise<TransactionEntity | null> {
     const start = Date.now();
     const rows = await this.sql<TransactionEntity[]>`
       SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
@@ -58,6 +58,7 @@ export class TransactionDBRepository implements ITransactionRepository {
     key: string,
     userId: string,
     orgId: string | null,
+    logger: BaseLogger,
   ): Promise<TransactionEntity | null> {
     let rows: TransactionEntity[];
 
@@ -91,7 +92,7 @@ export class TransactionDBRepository implements ITransactionRepository {
     return rows[0] ?? null;
   }
 
-  async updateFailureReason(id: string, reason: string): Promise<void> {
+  async updateFailureReason(id: string, reason: string, logger: BaseLogger): Promise<void> {
     const start = Date.now();
     await this.sql`
       UPDATE transactions
@@ -104,6 +105,7 @@ export class TransactionDBRepository implements ITransactionRepository {
   async updateProviderData(
     id: string,
     data: { providerTransactionId: string; checkoutUrl: string },
+    logger: BaseLogger,
   ): Promise<void> {
     const start = Date.now();
     await this.sql`
@@ -117,6 +119,7 @@ export class TransactionDBRepository implements ITransactionRepository {
 
   async list(
     query: ListTransactionsQuery,
+    logger: BaseLogger,
   ): Promise<{ rows: TransactionEntity[]; nextCursor: string | null }> {
     const { userId, orgId, limit, cursor } = query;
     const fetchLimit = limit + 1;
@@ -206,7 +209,7 @@ export class TransactionDBRepository implements ITransactionRepository {
     return { rows: allRows, nextCursor };
   }
 
-  async getRefundsByTransactionId(transactionId: string): Promise<RefundEntity[]> {
+  async getRefundsByTransactionId(transactionId: string, logger: BaseLogger): Promise<RefundEntity[]> {
     const start = Date.now();
     const rows = await this.sql<RefundEntity[]>`
       SELECT id, transaction_id, amount, reason, status, provider_refund_id, created_at, updated_at

@@ -12,7 +12,7 @@ export async function getTransactionHandler(
   const repo = new TransactionDBRepository(db);
   const useCase = new GetTransactionUseCase(repo);
 
-  const transaction = await useCase.execute(id, request.userId!, request.orgId ?? null);
+  const transaction = await useCase.execute(id, request.userId!, request.orgId ?? null, request.log);
 
   return reply.send({ data: transaction });
 }

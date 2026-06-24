@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { BaseLogger } from 'pino';
 import { resolveProvider } from '../providers/resolveProvider.js';
 import { ProviderError } from '../../../shared/errors.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
@@ -11,11 +12,12 @@ export class CheckoutUseCase {
     userId: string,
     orgId: string | null,
     body: CheckoutBodyType,
-    idempotencyKey?: string,
+    idempotencyKey: string | undefined,
+    logger: BaseLogger,
   ): Promise<{ checkoutUrl: string; transactionId: string }> {
     // R012: return cached result for duplicate idempotency key
     if (idempotencyKey) {
-      const existing = await this.repo.findByIdempotencyKey(idempotencyKey, userId, orgId);
+      const existing = await this.repo.findByIdempotencyKey(idempotencyKey, userId, orgId, logger);
       if (existing) {
         return {
           checkoutUrl: existing.checkout_url ?? '',
@@ -38,7 +40,7 @@ export class CheckoutUseCase {
       reference: id,
       idempotency_key: idempotencyKey,
       metadata: body.metadata ?? null,
-    });
+    }, logger);
 
     // R003: call provider after local record is persisted
     const provider = resolveProvider();
@@ -57,13 +59,13 @@ export class CheckoutUseCase {
       await this.repo.updateProviderData(transaction.id, {
         providerTransactionId: session.sessionId,
         checkoutUrl: session.checkoutUrl,
-      });
+      }, logger);
 
       return { checkoutUrl: session.checkoutUrl, transactionId: transaction.id };
     } catch (err) {
       // R005, EC004: persist failure_reason and re-throw
       if (err instanceof ProviderError) {
-        await this.repo.updateFailureReason(transaction.id, err.message);
+        await this.repo.updateFailureReason(transaction.id, err.message, logger);
       }
       throw err;
     }

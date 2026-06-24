@@ -1,3 +1,4 @@
+import type { BaseLogger } from 'pino';
 import type { WebhookEvent } from '@clerk/backend/webhooks';
 import type { UserJSON, OrganizationJSON, OrganizationMembershipJSON } from '@clerk/backend';
 import type { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
@@ -5,6 +6,7 @@ import type { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js
 export async function handleUserUpsert(
   event: WebhookEvent & { data: UserJSON },
   repo: ClerkSyncRepository,
+  logger: BaseLogger,
 ): Promise<void> {
   const data = event.data;
   const email = data.email_addresses[0]?.email_address ?? '';
@@ -18,12 +20,13 @@ export async function handleUserUpsert(
     email,
     name,
     avatarUrl,
-  });
+  }, logger);
 }
 
 export async function handleOrganizationUpsert(
   event: WebhookEvent & { data: OrganizationJSON },
   repo: ClerkSyncRepository,
+  logger: BaseLogger,
 ): Promise<void> {
   const data = event.data;
 
@@ -31,12 +34,13 @@ export async function handleOrganizationUpsert(
     clerkOrgId: data.id,
     name: data.name,
     slug: data.slug,
-  });
+  }, logger);
 }
 
 export async function handleMembershipCreate(
   event: WebhookEvent & { data: OrganizationMembershipJSON },
   repo: ClerkSyncRepository,
+  logger: BaseLogger,
 ): Promise<void> {
   const data = event.data;
 
@@ -44,25 +48,27 @@ export async function handleMembershipCreate(
     clerkUserId: data.public_user_data.user_id,
     clerkOrgId: data.organization.id,
     role: data.role,
-  });
+  }, logger);
 }
 
 export async function dispatchClerkEvent(
   event: WebhookEvent,
   repo: ClerkSyncRepository,
+  logger: BaseLogger,
 ): Promise<void> {
   switch (event.type) {
     case 'user.created':
     case 'user.updated':
-      await handleUserUpsert(event as WebhookEvent & { data: UserJSON }, repo);
+      await handleUserUpsert(event as WebhookEvent & { data: UserJSON }, repo, logger);
       break;
     case 'organization.created':
-      await handleOrganizationUpsert(event as WebhookEvent & { data: OrganizationJSON }, repo);
+      await handleOrganizationUpsert(event as WebhookEvent & { data: OrganizationJSON }, repo, logger);
       break;
     case 'organizationMembership.created':
       await handleMembershipCreate(
         event as WebhookEvent & { data: OrganizationMembershipJSON },
         repo,
+        logger,
       );
       break;
     default:

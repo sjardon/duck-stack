@@ -22,7 +22,7 @@ export async function listTransactionsHandler(
   const repo = new TransactionDBRepository(db);
   const useCase = new ListTransactionsUseCase(repo);
 
-  const result = await useCase.execute(request.userId!, request.orgId ?? null, { limit, cursor });
+  const result = await useCase.execute(request.userId!, request.orgId ?? null, { limit, cursor }, request.log);
 
   return reply.send(result);
 }

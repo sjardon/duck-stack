@@ -1,12 +1,12 @@
 import type { Sql } from 'postgres';
+import type { BaseLogger } from 'pino';
 import type { SubscriptionPlanEntity } from '../entities/subscriptionPlanEntity.js';
 import type { ISubscriptionPlanRepository } from './interfaces/iSubscriptionPlanRepository.js';
-import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class SubscriptionPlanDBRepository implements ISubscriptionPlanRepository {
   constructor(private readonly sql: Sql) {}
 
-  async listActive(): Promise<SubscriptionPlanEntity[]> {
+  async listActive(logger: BaseLogger): Promise<SubscriptionPlanEntity[]> {
     const start = Date.now();
     const rows = await this.sql<SubscriptionPlanEntity[]>`
       SELECT id, code, name, description, price, currency, interval, features,

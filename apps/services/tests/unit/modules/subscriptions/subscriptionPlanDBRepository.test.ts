@@ -1,5 +1,20 @@
 import { SubscriptionPlanDBRepository } from '../../../../src/modules/subscriptions/repositories/subscriptionPlanDBRepository.js';
 import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 const basePlan: SubscriptionPlanEntity = {
   id: '00000000-0000-0000-0001-000000000001',
@@ -44,18 +59,21 @@ describe('SubscriptionPlanDBRepository.listActive — query behavior (R001, R002
   it('WHEN listActive is called THEN it issues a SELECT with is_active = true and ORDER BY price ASC', async () => {
     const { sql, mockFn } = makeSqlMock([basePlan, proPlan]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     expect(mockFn).toHaveBeenCalledTimes(1);
     expect(result).toEqual([basePlan, proPlan]);
+    expect(fakeLogger.info).toHaveBeenCalledTimes(1);
   });
 
   it('WHEN no active plans exist THEN returns an empty array', async () => {
     const { sql } = makeSqlMock([]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     expect(result).toEqual([]);
   });
@@ -65,8 +83,9 @@ describe('SubscriptionPlanDBRepository.listActive — free plan inclusion (EC001
   it('WHEN a plan has price = 0 THEN it is included in the result', async () => {
     const { sql } = makeSqlMock([basePlan]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     expect(result).toHaveLength(1);
     expect(result[0].price).toBe(0);
@@ -79,8 +98,9 @@ describe('SubscriptionPlanDBRepository.listActive — inactive plan exclusion (E
     // The query filters at the DB level; the mock returns only active plans
     const { sql } = makeSqlMock([basePlan]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     // Only the active plan is in the result; the inactive one would not be returned by the DB
     const inactivePlanPresent = result.some((p) => !p.is_active);
@@ -92,8 +112,9 @@ describe('SubscriptionPlanDBRepository.listActive — provider_plan_id nullable 
   it('WHEN a plan has no provider_plan_id THEN provider_plan_id is null in the result', async () => {
     const { sql } = makeSqlMock([basePlan]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     expect(result[0].provider_plan_id).toBeNull();
   });
@@ -102,8 +123,9 @@ describe('SubscriptionPlanDBRepository.listActive — provider_plan_id nullable 
     const planWithProvider: SubscriptionPlanEntity = { ...proPlan, provider_plan_id: 'stripe_price_001' };
     const { sql } = makeSqlMock([planWithProvider]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     expect(result[0].provider_plan_id).toBe('stripe_price_001');
   });
@@ -127,8 +149,9 @@ describe('SubscriptionPlanDBRepository.listActive — seed data (R003)', () => {
     };
     const { sql } = makeSqlMock([basePlan, proPlan, businessPlan]);
     const repo = new SubscriptionPlanDBRepository(sql as never);
+    const fakeLogger = makeLogger();
 
-    const result = await repo.listActive();
+    const result = await repo.listActive(fakeLogger);
 
     const codes = result.map((p) => p.code);
     expect(codes).toContain('free');

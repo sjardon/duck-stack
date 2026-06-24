@@ -1,3 +1,4 @@
+import type { BaseLogger } from 'pino';
 import type {
   IMobbexBillingSyncRepository,
   EventOutcome,
@@ -14,6 +15,7 @@ type DispatchOutcome = EventOutcome | 'refund_approved' | 'refund_failed' | 'tra
 export async function dispatchMobbexEvent(
   payload: Record<string, unknown>,
   repo: IMobbexBillingSyncRepository,
+  logger: BaseLogger,
 ): Promise<DispatchOutcome> {
   const eventType =
     (payload['type'] as string | undefined) ?? (payload['event_type'] as string | undefined) ?? '';
@@ -30,7 +32,7 @@ export async function dispatchMobbexEvent(
       providerTransactionId,
       reference,
       status: 'approved',
-    });
+    }, logger);
     outcome = result.outcome;
     resolvedTransactionId = result.transactionId;
   } else if (FAILURE_EVENT_TYPES.has(eventType)) {
@@ -40,7 +42,7 @@ export async function dispatchMobbexEvent(
       reference,
       status: 'failed',
       failureReason,
-    });
+    }, logger);
     outcome = result.outcome;
     resolvedTransactionId = result.transactionId;
   } else if (REFUND_SUCCESS_EVENT_TYPES.has(eventType) || REFUND_FAILURE_EVENT_TYPES.has(eventType)) {
@@ -50,7 +52,7 @@ export async function dispatchMobbexEvent(
 
     // EC006 — missing or non-positive amount / missing refund_id: skip upsert, record event with null transactionId
     if (!providerRefundId || amount === null || typeof amount !== 'number' || amount <= 0) {
-      await repo.recordEvent({ eventType, payload, transactionId: null });
+      await repo.recordEvent({ eventType, payload, transactionId: null }, logger);
       return 'unresolved';
     }
 
@@ -63,7 +65,7 @@ export async function dispatchMobbexEvent(
       amount,
       reason,
       refundStatus,
-    });
+    }, logger);
 
     outcome = result.outcome;
     resolvedTransactionId = result.transactionId;
@@ -76,7 +78,7 @@ export async function dispatchMobbexEvent(
     eventType,
     payload,
     transactionId: resolvedTransactionId,
-  });
+  }, logger);
 
   return outcome;
 }

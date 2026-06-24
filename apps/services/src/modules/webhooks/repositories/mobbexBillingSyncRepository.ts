@@ -1,4 +1,5 @@
 import type { Sql, TransactionSql } from 'postgres';
+import type { BaseLogger } from 'pino';
 import type {
   IMobbexBillingSyncRepository,
   RecordEventInput,
@@ -9,12 +10,11 @@ import type {
   UpsertRefundResult,
   RefundOutcome,
 } from './interfaces/iMobbexBillingSyncRepository.js';
-import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository {
   constructor(private readonly sql: Sql) {}
 
-  async recordEvent(input: RecordEventInput): Promise<void> {
+  async recordEvent(input: RecordEventInput, logger: BaseLogger): Promise<void> {
     const start = Date.now();
     await this.sql`
       INSERT INTO billing_webhook_events (provider, event_type, payload, received_at, transaction_id)
@@ -29,7 +29,7 @@ export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository
     logger.info({ duration: Date.now() - start }, 'MobbexBillingSyncRepository.recordEvent');
   }
 
-  async updateTransactionStatus(input: UpdateTransactionStatusInput): Promise<UpdateTransactionStatusResult> {
+  async updateTransactionStatus(input: UpdateTransactionStatusInput, logger: BaseLogger): Promise<UpdateTransactionStatusResult> {
     return this.sql.begin(async (tx) => {
       // Step 1: Resolve transaction by provider_transaction_id first, fall back to reference
       let rows: Array<{ id: string; status: string }> = [];
@@ -110,7 +110,7 @@ export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository
     });
   }
 
-  async upsertRefundAndMaybeMarkTransactionRefunded(input: UpsertRefundInput): Promise<UpsertRefundResult> {
+  async upsertRefundAndMaybeMarkTransactionRefunded(input: UpsertRefundInput, logger: BaseLogger): Promise<UpsertRefundResult> {
     return this.sql.begin(async (tx) => {
       // Step 1: Resolve parent transaction by provider_transaction_id
       const selectStart = Date.now();

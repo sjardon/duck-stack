@@ -1,5 +1,20 @@
 import { dispatchMobbexEvent } from '../../../../../src/modules/webhooks/mobbex/mobbexEventHandlers.js';
 import type { IMobbexBillingSyncRepository } from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 function makeRepo(updateOutcome: 'approved' | 'failed' | 'noop' | 'unresolved' = 'approved'): IMobbexBillingSyncRepository {
   const transactionId = updateOutcome !== 'unresolved' ? 'uuid-tx-001' : null;
@@ -24,12 +39,13 @@ function makeRefundRepo(refundOutcome: 'refund_approved' | 'refund_failed' | 'tr
 describe('dispatchMobbexEvent — success event', () => {
   it('WHEN payload type is "payment.success" THEN calls updateTransactionStatus with status "approved"', async () => {
     const repo = makeRepo('approved');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.success',
       data: { id: 'ptx-001', reference: 'ref-001' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -37,45 +53,51 @@ describe('dispatchMobbexEvent — success event', () => {
         providerTransactionId: 'ptx-001',
         reference: 'ref-001',
       }),
+      fakeLogger,
     );
   });
 
   it('WHEN payload type is "checkout.success" THEN calls updateTransactionStatus with status "approved"', async () => {
     const repo = makeRepo('approved');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'checkout.success',
       data: { id: 'ptx-002', reference: 'ref-002' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'approved' }),
+      fakeLogger,
     );
   });
 
   it('WHEN a success event is dispatched THEN recordEvent is called with the correct eventType', async () => {
     const repo = makeRepo('approved');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.success',
       data: { id: 'ptx-001', reference: 'ref-001' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.recordEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: 'payment.success' }),
+      fakeLogger,
     );
   });
 
   it('WHEN event type is unknown THEN updateTransactionStatus is NOT called but recordEvent IS called', async () => {
     const repo = makeRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'subscription.created',
       data: { id: 'ptx-003' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).not.toHaveBeenCalled();
     expect(repo.recordEvent).toHaveBeenCalledTimes(1);
@@ -83,12 +105,13 @@ describe('dispatchMobbexEvent — success event', () => {
 
   it('WHEN event type is unknown THEN returns "unresolved"', async () => {
     const repo = makeRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'subscription.created',
       data: {},
     };
 
-    const outcome = await dispatchMobbexEvent(payload, repo);
+    const outcome = await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(outcome).toBe('unresolved');
   });
@@ -99,12 +122,13 @@ describe('dispatchMobbexEvent — success event', () => {
 describe('dispatchMobbexEvent — failure event', () => {
   it('WHEN payload type is "payment.failure" THEN calls updateTransactionStatus with status "failed" and failureReason', async () => {
     const repo = makeRepo('failed');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.failure',
       data: { id: 'ptx-001', reference: 'ref-001', message: 'declined' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -113,49 +137,55 @@ describe('dispatchMobbexEvent — failure event', () => {
         providerTransactionId: 'ptx-001',
         reference: 'ref-001',
       }),
+      fakeLogger,
     );
   });
 
   it('WHEN payload type is "payment.rejected" THEN calls updateTransactionStatus with status "failed"', async () => {
     const repo = makeRepo('failed');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.rejected',
       data: { id: 'ptx-002', reference: 'ref-002', message: 'rejected by bank' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' }),
+      fakeLogger,
     );
   });
 
   it('WHEN a failure event is dispatched THEN recordEvent is called', async () => {
     const repo = makeRepo('failed');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.failure',
       data: { id: 'ptx-001', reference: 'ref-001', message: 'declined' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.recordEvent).toHaveBeenCalledTimes(1);
   });
 
   it('WHEN data.id and data.reference are both absent THEN both fields are null in updateTransactionStatus call', async () => {
     const repo = makeRepo('unresolved');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'payment.failure',
       data: { message: 'no id or reference' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.updateTransactionStatus).toHaveBeenCalledWith(
       expect.objectContaining({
         providerTransactionId: null,
         reference: null,
       }),
+      fakeLogger,
     );
   });
 });
@@ -165,12 +195,13 @@ describe('dispatchMobbexEvent — failure event', () => {
 describe('dispatchMobbexEvent — refund.success event', () => {
   it('WHEN event_type is "refund.success" with valid refund_id and positive amount THEN upsertRefundAndMaybeMarkTransactionRefunded is called with refundStatus "approved" and recordEvent is called afterward', async () => {
     const repo = makeRefundRepo('refund_approved');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.success',
       data: { id: 'ptx-001', refund_id: 'prov-refund-001', amount: 500, reason: 'Customer request' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -180,6 +211,7 @@ describe('dispatchMobbexEvent — refund.success event', () => {
         reason: 'Customer request',
         refundStatus: 'approved',
       }),
+      fakeLogger,
     );
     expect(repo.recordEvent).toHaveBeenCalledTimes(1);
     expect(repo.updateTransactionStatus).not.toHaveBeenCalled();
@@ -191,12 +223,13 @@ describe('dispatchMobbexEvent — refund.success event', () => {
 describe('dispatchMobbexEvent — refund.failure event', () => {
   it('WHEN event_type is "refund.failure" THEN upsertRefundAndMaybeMarkTransactionRefunded is called with refundStatus "failed" and recordEvent is called', async () => {
     const repo = makeRefundRepo('refund_failed');
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.failure',
       data: { id: 'ptx-001', refund_id: 'prov-refund-002', amount: 300, reason: 'Declined' },
     };
 
-    await dispatchMobbexEvent(payload, repo);
+    await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -204,6 +237,7 @@ describe('dispatchMobbexEvent — refund.failure event', () => {
         providerRefundId: 'prov-refund-002',
         amount: 300,
       }),
+      fakeLogger,
     );
     expect(repo.recordEvent).toHaveBeenCalledTimes(1);
   });
@@ -214,16 +248,18 @@ describe('dispatchMobbexEvent — refund.failure event', () => {
 describe('dispatchMobbexEvent — missing providerRefundId', () => {
   it('WHEN data.refund_id is absent THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called, recordEvent IS called with transactionId: null, and outcome is "unresolved"', async () => {
     const repo = makeRefundRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.success',
       data: { id: 'ptx-001', amount: 500 }, // no refund_id
     };
 
-    const outcome = await dispatchMobbexEvent(payload, repo);
+    const outcome = await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
     expect(repo.recordEvent).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: null }),
+      fakeLogger,
     );
     expect(outcome).toBe('unresolved');
   });
@@ -234,28 +270,31 @@ describe('dispatchMobbexEvent — missing providerRefundId', () => {
 describe('dispatchMobbexEvent — missing or non-positive amount', () => {
   it('WHEN data.amount is absent THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called, recordEvent IS called with transactionId: null, and outcome is "unresolved"', async () => {
     const repo = makeRefundRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.success',
       data: { id: 'ptx-001', refund_id: 'prov-refund-003' }, // no amount
     };
 
-    const outcome = await dispatchMobbexEvent(payload, repo);
+    const outcome = await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
     expect(repo.recordEvent).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: null }),
+      fakeLogger,
     );
     expect(outcome).toBe('unresolved');
   });
 
   it('WHEN data.amount is zero THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called and outcome is "unresolved"', async () => {
     const repo = makeRefundRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.success',
       data: { id: 'ptx-001', refund_id: 'prov-refund-004', amount: 0 },
     };
 
-    const outcome = await dispatchMobbexEvent(payload, repo);
+    const outcome = await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
     expect(outcome).toBe('unresolved');
@@ -263,12 +302,13 @@ describe('dispatchMobbexEvent — missing or non-positive amount', () => {
 
   it('WHEN data.amount is negative THEN upsertRefundAndMaybeMarkTransactionRefunded is NOT called and outcome is "unresolved"', async () => {
     const repo = makeRefundRepo();
+    const fakeLogger = makeLogger();
     const payload = {
       type: 'refund.failure',
       data: { id: 'ptx-001', refund_id: 'prov-refund-005', amount: -100 },
     };
 
-    const outcome = await dispatchMobbexEvent(payload, repo);
+    const outcome = await dispatchMobbexEvent(payload, repo, fakeLogger);
 
     expect(repo.upsertRefundAndMaybeMarkTransactionRefunded).not.toHaveBeenCalled();
     expect(outcome).toBe('unresolved');

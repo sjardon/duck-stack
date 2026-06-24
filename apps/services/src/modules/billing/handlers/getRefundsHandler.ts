@@ -12,7 +12,7 @@ export async function getRefundsHandler(
   const repo = new TransactionDBRepository(db);
   const useCase = new GetRefundsUseCase(repo);
 
-  const refunds = await useCase.execute(id, request.userId!, request.orgId ?? null);
+  const refunds = await useCase.execute(id, request.userId!, request.orgId ?? null, request.log);
 
   return reply.send({ data: refunds });
 }

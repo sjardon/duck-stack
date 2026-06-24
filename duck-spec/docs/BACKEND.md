@@ -51,9 +51,22 @@ This rule lets the underlying provider change without a rename cascade and keeps
 
 Every request gets a UUID via `genReqId`. `LOG_LEVEL` env var controls level (default `info`).
 
+### Logger propagation pattern
+
+The request-bound logger is threaded explicitly through the call stack using an explicit per-call parameter. This is the enforced pattern across all modules:
+
+| Layer | How the logger is supplied |
+|-------|---------------------------|
+| Handler | Reads `request.log` from the Fastify request object |
+| Use case `execute` | Accepts `logger: pino.BaseLogger` as a parameter; receives `request.log` from the handler |
+| Repository method | Accepts `logger: pino.BaseLogger` as a parameter; receives the logger forwarded by the use case |
+| Webhook dispatcher (`dispatchMobbexEvent`, `dispatchClerkEvent`) | Accepts `logger: pino.BaseLogger` as a parameter; receives `request.log` from the route handler |
+
+Repository files do not import the static logger. The static logger from `shared/infrastructure/logger.ts` is passed by callers that run outside the request scope (server bootstrap, `db.ts`, `resolveProvider.ts`). Using `pino.BaseLogger` as the parameter type keeps use cases and repositories free of Fastify-specific types.
+
 ### Operational rules
 
-- Use the logger from `src/shared/infrastructure/logger.ts` outside the request scope; inside a request use the Fastify-bound logger so the `requestId` is included automatically.
+- Use the logger from `src/shared/infrastructure/logger.ts` outside the request scope; inside a request always pass `request.log` down through the use case and into the repository — never import the static logger from within a repository or use case file that executes during a request.
 - Structured logging only. Stable field names: `timestamp`, `level`, `message`, `requestId`, `userId`, `duration`.
 - Log: request in / response out at the boundary; external calls (DB, HTTP, queue) with their latency; business-significant state transitions; every error with its stack.
 - Do NOT log: secrets, tokens, passwords, PII (GDPR/compliance); high-frequency trivial events inside tight loops; data already present in the request context.

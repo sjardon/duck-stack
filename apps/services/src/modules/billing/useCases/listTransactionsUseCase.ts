@@ -1,3 +1,4 @@
+import type { BaseLogger } from 'pino';
 import { ValidationError } from '../../../shared/errors.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
 import type { TransactionListResponse } from '@repo/types';
@@ -9,6 +10,7 @@ export class ListTransactionsUseCase {
     userId: string,
     orgId: string | null,
     query: { limit: number; cursor?: string },
+    logger: BaseLogger,
   ): Promise<TransactionListResponse> {
     const { limit, cursor } = query;
 
@@ -33,12 +35,15 @@ export class ListTransactionsUseCase {
       }
     }
 
-    const { rows, nextCursor } = await this.repo.list({
-      userId,
-      orgId,
-      limit,
-      cursor,
-    });
+    const { rows, nextCursor } = await this.repo.list(
+      {
+        userId,
+        orgId,
+        limit,
+        cursor,
+      },
+      logger,
+    );
 
     return { data: rows, nextCursor };
   }

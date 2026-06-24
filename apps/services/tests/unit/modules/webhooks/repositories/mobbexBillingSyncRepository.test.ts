@@ -1,5 +1,20 @@
 import { MobbexBillingSyncRepository } from '../../../../../src/modules/webhooks/repositories/mobbexBillingSyncRepository.js';
 import type { UpsertRefundInput } from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 // Helpers to build sql mocks
 
@@ -44,25 +59,28 @@ describe('MobbexBillingSyncRepository.recordEvent', () => {
   it('WHEN recordEvent is called with a transactionId THEN inserts into billing_webhook_events with all required fields', async () => {
     const { sql, mockFn } = makeSimpleSqlMock([]);
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     await repo.recordEvent({
       eventType: 'payment.success',
       payload: { type: 'payment.success', data: { id: 'ptx-001' } },
       transactionId: 'uuid-tx-001',
-    });
+    }, fakeLogger);
 
     expect(mockFn).toHaveBeenCalledTimes(1);
+    expect(fakeLogger.info).toHaveBeenCalledTimes(1);
   });
 
   it('WHEN recordEvent is called with transactionId null THEN insert still executes with NULL transaction_id', async () => {
     const { sql, mockFn } = makeSimpleSqlMock([]);
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     await repo.recordEvent({
       eventType: 'payment.success',
       payload: { type: 'payment.success', data: {} },
       transactionId: null,
-    });
+    }, fakeLogger);
 
     expect(mockFn).toHaveBeenCalledTimes(1);
   });
@@ -81,12 +99,13 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — approved path'
       .mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const result = await repo.updateTransactionStatus({
       providerTransactionId: 'ptx-001',
       reference: null,
       status: 'approved',
-    });
+    }, fakeLogger);
 
     expect(beginMock).toHaveBeenCalledTimes(1);
     expect(result.outcome).toBe('approved');
@@ -100,12 +119,13 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — approved path'
     innerMockFn.mockResolvedValueOnce([approvedTx]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const result = await repo.updateTransactionStatus({
       providerTransactionId: 'ptx-001',
       reference: null,
       status: 'approved',
-    });
+    }, fakeLogger);
 
     expect(beginMock).toHaveBeenCalledTimes(1);
     // Only SELECT was called, no UPDATE
@@ -127,13 +147,14 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — failed path', 
       .mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const result = await repo.updateTransactionStatus({
       providerTransactionId: 'ptx-001',
       reference: 'ref-001',
       status: 'failed',
       failureReason: 'Card declined',
-    });
+    }, fakeLogger);
 
     expect(result.outcome).toBe('failed');
     expect(result.transactionId).toBe('uuid-tx-001');
@@ -146,13 +167,14 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — failed path', 
     innerMockFn.mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const result = await repo.updateTransactionStatus({
       providerTransactionId: 'ptx-999',
       reference: 'ref-999',
       status: 'failed',
       failureReason: 'Not found',
-    });
+    }, fakeLogger);
 
     expect(result.outcome).toBe('unresolved');
     expect(result.transactionId).toBeNull();
@@ -169,13 +191,14 @@ describe('MobbexBillingSyncRepository.updateTransactionStatus — failed path', 
       .mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const result = await repo.updateTransactionStatus({
       providerTransactionId: null,
       reference: 'ref-001',
       status: 'failed',
       failureReason: 'Declined',
-    });
+    }, fakeLogger);
 
     expect(result.outcome).toBe('failed');
     expect(result.transactionId).toBe('uuid-tx-001');
@@ -202,6 +225,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       .mockResolvedValueOnce([{ total_approved: '500' }]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const input: UpsertRefundInput = {
       providerTransactionId: 'ptx-001',
@@ -211,7 +235,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       refundStatus: 'approved',
     };
 
-    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
 
     expect(result.outcome).toBe('refund_approved');
     expect(result.transactionId).toBe('uuid-tx-001');
@@ -239,6 +263,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       .mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const input: UpsertRefundInput = {
       providerTransactionId: 'ptx-001',
@@ -248,7 +273,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       refundStatus: 'approved',
     };
 
-    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
 
     expect(result.outcome).toBe('transaction_refunded');
     expect(result.transactionId).toBe('uuid-tx-001');
@@ -273,6 +298,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       .mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const input: UpsertRefundInput = {
       providerTransactionId: 'ptx-001',
@@ -282,7 +308,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       refundStatus: 'failed',
     };
 
-    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
 
     expect(result.outcome).toBe('refund_failed');
     expect(result.transactionId).toBe('uuid-tx-001');
@@ -301,6 +327,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
     innerMockFn.mockResolvedValueOnce([]);
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const input: UpsertRefundInput = {
       providerTransactionId: 'ptx-nonexistent',
@@ -310,7 +337,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       refundStatus: 'approved',
     };
 
-    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const result = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
 
     expect(result.outcome).toBe('unresolved');
     expect(result.transactionId).toBeNull();
@@ -333,6 +360,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       .mockResolvedValueOnce([{ total_approved: '500' }]); // SUM — partial
 
     const repo = new MobbexBillingSyncRepository(sql as never);
+    const fakeLogger = makeLogger();
 
     const input: UpsertRefundInput = {
       providerTransactionId: 'ptx-001',
@@ -342,7 +370,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       refundStatus: 'approved',
     };
 
-    const firstResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const firstResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
     expect(firstResult.outcome).toBe('refund_approved');
 
     // Reset mock for second delivery
@@ -352,7 +380,7 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
       .mockResolvedValueOnce([])             // UPSERT refunds (ON CONFLICT DO UPDATE — no duplicate)
       .mockResolvedValueOnce([{ total_approved: '500' }]); // SUM — still partial (same refund)
 
-    const secondResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input);
+    const secondResult = await repo.upsertRefundAndMaybeMarkTransactionRefunded(input, fakeLogger);
     expect(secondResult.outcome).toBe('refund_approved');
     expect(secondResult.transactionId).toBe('uuid-tx-001');
     // 3 inner SQL calls for the second delivery too

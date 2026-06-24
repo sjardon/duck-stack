@@ -1,6 +1,21 @@
 import { ListPlansUseCase } from '../../../../src/modules/subscriptions/useCases/listPlansUseCase.js';
 import type { ISubscriptionPlanRepository } from '../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionPlanRepository.js';
 import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 const freePlan: SubscriptionPlanEntity = {
   id: '00000000-0000-0000-0001-000000000001',
@@ -42,8 +57,9 @@ describe('ListPlansUseCase — basic execution (R002)', () => {
   it('WHEN execute is called THEN it returns all items from repo.listActive', async () => {
     const repo = makeRepo([freePlan, proPlan]);
     const useCase = new ListPlansUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(fakeLogger);
 
     expect(repo.listActive).toHaveBeenCalledTimes(1);
     expect(result).toEqual([freePlan, proPlan]);
@@ -54,8 +70,9 @@ describe('ListPlansUseCase — empty catalog (R002)', () => {
   it('WHEN the repository returns an empty array THEN the use case returns an empty array', async () => {
     const repo = makeRepo([]);
     const useCase = new ListPlansUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(fakeLogger);
 
     expect(result).toEqual([]);
   });
@@ -65,8 +82,9 @@ describe('ListPlansUseCase — free plan inclusion (EC001)', () => {
   it('WHEN the repository returns a plan with price = 0 THEN it is included in the result', async () => {
     const repo = makeRepo([freePlan]);
     const useCase = new ListPlansUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(fakeLogger);
 
     expect(result).toHaveLength(1);
     expect(result[0].price).toBe(0);
@@ -78,8 +96,9 @@ describe('ListPlansUseCase — inactive plan omission (EC002)', () => {
   it('WHEN the repository returns only active plans THEN no inactive plans appear in the result', async () => {
     const repo = makeRepo([freePlan, proPlan]);
     const useCase = new ListPlansUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(fakeLogger);
 
     const hasInactive = result.some((p) => !p.is_active);
     expect(hasInactive).toBe(false);

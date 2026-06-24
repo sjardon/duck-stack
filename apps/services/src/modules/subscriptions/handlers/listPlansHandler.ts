@@ -7,9 +7,9 @@ const repo = new SubscriptionPlanDBRepository(db);
 const useCase = new ListPlansUseCase(repo);
 
 export async function listPlansHandler(
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const data = await useCase.execute();
+  const data = await useCase.execute(request.log);
   return reply.send({ data });
 }

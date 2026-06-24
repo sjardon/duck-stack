@@ -40,7 +40,11 @@ function makeReply() {
 }
 
 function makeRequest(body: unknown, userId = 'clerk_abc'): FastifyRequest {
-  return { body, userId } as unknown as FastifyRequest;
+  return {
+    body,
+    userId,
+    log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+  } as unknown as FastifyRequest;
 }
 
 describe('completeOnboardingHandler', () => {
@@ -109,7 +113,7 @@ describe('completeOnboardingHandler', () => {
       job_role: 'Engineer',
       company_size: '11-50',
       primary_use_case: 'Build internal tools',
-    });
+    }, expect.anything());
     expect(reply.send).toHaveBeenCalledWith({ data: completedProfile });
   });
 });

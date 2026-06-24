@@ -1,6 +1,21 @@
 import type { UserProfile } from '@repo/types';
+import type { BaseLogger } from 'pino';
 import { UserDBRepository } from '../../../src/modules/users/repositories/userDBRepository.js';
 import { GetUserProfileUseCase } from '../../../src/modules/users/useCases/getUserProfileUseCase.js';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 // T001: schema-level contract check — findByClerkUserId returns onboarding columns
 describe('UserDBRepository.findByClerkUserId — onboarding columns', () => {
@@ -25,7 +40,8 @@ describe('UserDBRepository.findByClerkUserId — onboarding columns', () => {
     );
 
     const repo = new UserDBRepository(sql as never);
-    const result = await repo.findByClerkUserId('clerk_abc');
+    const fakeLogger = makeLogger();
+    const result = await repo.findByClerkUserId('clerk_abc', fakeLogger);
 
     expect(result).not.toBeNull();
     expect(result).toHaveProperty('onboarding_completed', false);
@@ -57,7 +73,8 @@ describe('GetUserProfileUseCase.execute — onboarding fields', () => {
     };
 
     const useCase = new GetUserProfileUseCase(mockRepo);
-    const result = await useCase.execute('clerk_abc');
+    const fakeLogger = makeLogger();
+    const result = await useCase.execute('clerk_abc', fakeLogger);
 
     expect(result).toHaveProperty('onboarding_completed', false);
     expect(result).toHaveProperty('job_role', null);

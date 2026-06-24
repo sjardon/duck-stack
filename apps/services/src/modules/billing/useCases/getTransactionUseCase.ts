@@ -1,3 +1,4 @@
+import type { BaseLogger } from 'pino';
 import { NotFoundError, ForbiddenError } from '../../../shared/errors.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
 import type { TransactionEntity } from '../entities/transactionEntity.js';
@@ -5,8 +6,8 @@ import type { TransactionEntity } from '../entities/transactionEntity.js';
 export class GetTransactionUseCase {
   constructor(private readonly repo: ITransactionRepository) {}
 
-  async execute(id: string, userId: string, orgId: string | null): Promise<TransactionEntity> {
-    const transaction = await this.repo.findById(id);
+  async execute(id: string, userId: string, orgId: string | null, logger: BaseLogger): Promise<TransactionEntity> {
+    const transaction = await this.repo.findById(id, logger);
 
     if (!transaction) {
       throw new NotFoundError('Transaction');

@@ -86,6 +86,14 @@ Two documented exceptions are preserved and not migrated: `shared/infrastructure
 
 All files under `apps/services/src/` follow lowercase camelCase naming with no dot-separated suffixes (other than `.ts` and `.test.ts`) and no hyphens. Plugin files in `shared/plugins/` use camelCase without a `.plugin.ts` suffix (`errorHandler.ts`, `clerkAuthPlugin.ts`, `requireAuth.ts`, `requireOrg.ts`). Entity files in each module's `entities/` directory carry no `.entity.ts` suffix (`transactionEntity.ts`, `refundEntity.ts`, `subscriptionPlanEntity.ts`, `userEntity.ts`). DTO files in each module's `dtos/` directory carry no `.dto.ts` suffix (`checkoutDto.ts`, `completeOnboardingDto.ts`, `updateProfileDto.ts`). All import paths in source and test files reference these normalized names. No class, function, interface, or type name was altered; only file names and import specifiers were updated.
 
+### Request-bound logger propagation (SERVICES-005)
+
+The Fastify request-bound logger (`request.log`) is propagated explicitly from every handler through the use case and into every repository method that emits log lines. Each repository method and use case `execute` signature that calls `logger.*` accepts a `logger: pino.BaseLogger` parameter. Handlers pass `request.log`; code paths outside the request scope (server bootstrap, `db.ts`, `resolveProvider.ts`) continue to pass the static logger from `shared/infrastructure/logger.ts`.
+
+This applies uniformly across the billing module (`TransactionDBRepository`, `CheckoutUseCase`, `GetTransactionUseCase`, `ListTransactionsUseCase`, `GetRefundsUseCase`), the users module (`UserDBRepository`, `GetUserProfileUseCase`, `UpdateUserProfileUseCase`, `CompleteOnboardingUseCase`), the subscriptions module (`SubscriptionPlanDBRepository`, `ListPlansUseCase`), and both webhook sync repositories (`MobbexBillingSyncRepository`, `ClerkSyncRepository`). The webhook dispatcher functions `dispatchMobbexEvent` and `dispatchClerkEvent` (including their inner `handle*` helpers) also accept a `logger: BaseLogger` parameter and forward it to all repository calls. Webhook route handlers pass `request.log` to these dispatchers.
+
+The static logger at `shared/infrastructure/logger.ts` is not removed. Because all in-request log lines flow through `request.log`, the Fastify-assigned `requestId` appears in every log line emitted during an HTTP request. No log message text, level, or structured field name is changed. Unit tests supply a Jest mock object satisfying `pino.BaseLogger` — no Fastify server is required for repository or use case tests.
+
 ### Health module
 
 `modules/health/routes.ts` registers `GET /health`, which responds with `{ status: 'ok', timestamp: <ISO string> }` from memory with no I/O. This endpoint serves as the canonical reference implementation of the vertical-slicing module convention and satisfies the App Runner health-check path.

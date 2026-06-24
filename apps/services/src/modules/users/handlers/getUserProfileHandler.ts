@@ -10,7 +10,7 @@ export async function getUserProfileHandler(
   const repo = new UserDBRepository(db);
   const useCase = new GetUserProfileUseCase(repo);
 
-  const profile = await useCase.execute(request.userId!);
+  const profile = await useCase.execute(request.userId!, request.log);
 
   return reply.send({ data: profile });
 }

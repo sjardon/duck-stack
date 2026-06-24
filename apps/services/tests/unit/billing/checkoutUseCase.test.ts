@@ -3,6 +3,21 @@ import { ProviderError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
 import type { CheckoutBodyType } from '../../../src/modules/billing/dtos/checkoutDto.js';
+import type { BaseLogger } from 'pino';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 // Prevent module-level DB connection from firing
 jest.mock('../../../src/shared/infrastructure/db.js', () => ({ db: {} }));
@@ -72,10 +87,11 @@ describe('CheckoutUseCase — idempotency key matches existing transaction (R012
       findByIdempotencyKey: jest.fn().mockResolvedValue(existingEntity),
     });
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute('user-001', null, validBody, 'idem-key-001');
+    const result = await useCase.execute('user-001', null, validBody, 'idem-key-001', fakeLogger);
 
-    expect(repo.findByIdempotencyKey).toHaveBeenCalledWith('idem-key-001', 'user-001', null);
+    expect(repo.findByIdempotencyKey).toHaveBeenCalledWith('idem-key-001', 'user-001', null, fakeLogger);
     expect(repo.create).not.toHaveBeenCalled();
     expect(mockCreateCheckout).not.toHaveBeenCalled();
     expect(result.transactionId).toBe(existingEntity.id);
@@ -87,8 +103,9 @@ describe('CheckoutUseCase — no idempotency key, inserts pending row then calls
   it('WHEN no idempotency key THEN inserts pending row with reference = id then calls provider', async () => {
     const repo = makeRepo();
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    await useCase.execute('user-001', null, validBody);
+    await useCase.execute('user-001', null, validBody, undefined, fakeLogger);
 
     expect(repo.findByIdempotencyKey).not.toHaveBeenCalled();
     expect(repo.create).toHaveBeenCalledTimes(1);
@@ -103,8 +120,9 @@ describe('CheckoutUseCase — provider success (R004)', () => {
   it('WHEN provider succeeds THEN calls updateProviderData and returns { checkoutUrl, transactionId }', async () => {
     const repo = makeRepo();
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    const result = await useCase.execute('user-001', null, validBody);
+    const result = await useCase.execute('user-001', null, validBody, undefined, fakeLogger);
 
     expect(repo.updateProviderData).toHaveBeenCalledTimes(1);
     expect(result.checkoutUrl).toBe('https://mobbex.com/pay/session-001');
@@ -118,9 +136,10 @@ describe('CheckoutUseCase — provider failure (R005, EC004)', () => {
     mockCreateCheckout.mockRejectedValue(providerErr);
     const repo = makeRepo();
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    await expect(useCase.execute('user-001', null, validBody)).rejects.toThrow(ProviderError);
-    expect(repo.updateFailureReason).toHaveBeenCalledWith(pendingEntity.id, providerErr.message);
+    await expect(useCase.execute('user-001', null, validBody, undefined, fakeLogger)).rejects.toThrow(ProviderError);
+    expect(repo.updateFailureReason).toHaveBeenCalledWith(pendingEntity.id, providerErr.message, fakeLogger);
     // Row stays in pending status (no status update called)
     expect(repo.updateProviderData).not.toHaveBeenCalled();
   });
@@ -130,8 +149,9 @@ describe('CheckoutUseCase — org association (R013, EC003)', () => {
   it('WHEN orgId is non-null THEN org_id is set on the created row', async () => {
     const repo = makeRepo();
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    await useCase.execute('user-001', 'org-001', validBody);
+    await useCase.execute('user-001', 'org-001', validBody, undefined, fakeLogger);
 
     const createCall = (repo.create as jest.Mock).mock.calls[0][0] as { org_id: string | null };
     expect(createCall.org_id).toBe('org-001');
@@ -140,8 +160,9 @@ describe('CheckoutUseCase — org association (R013, EC003)', () => {
   it('WHEN orgId is null (EC003) THEN org_id is null and user_id is set', async () => {
     const repo = makeRepo();
     const useCase = new CheckoutUseCase(repo);
+    const fakeLogger = makeLogger();
 
-    await useCase.execute('user-001', null, validBody);
+    await useCase.execute('user-001', null, validBody, undefined, fakeLogger);
 
     const createCall = (repo.create as jest.Mock).mock.calls[0][0] as {
       org_id: string | null;

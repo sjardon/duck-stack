@@ -1,6 +1,21 @@
 import type { UserProfile } from '@repo/types';
+import type { BaseLogger } from 'pino';
 import { CompleteOnboardingUseCase } from '../../../src/modules/users/useCases/completeOnboardingUseCase.js';
 import { NotFoundError } from '../../../src/shared/errors.js';
+
+function makeLogger(): BaseLogger {
+  return {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+    child: jest.fn(),
+  } as unknown as BaseLogger;
+}
 
 const onboardingData = {
   job_role: 'Engineer',
@@ -29,9 +44,10 @@ describe('CompleteOnboardingUseCase.execute', () => {
     };
 
     const useCase = new CompleteOnboardingUseCase(mockRepo);
-    const result = await useCase.execute('clerk_abc', onboardingData);
+    const fakeLogger = makeLogger();
+    const result = await useCase.execute('clerk_abc', onboardingData, fakeLogger);
 
-    expect(mockRepo.completeOnboarding).toHaveBeenCalledWith('clerk_abc', onboardingData);
+    expect(mockRepo.completeOnboarding).toHaveBeenCalledWith('clerk_abc', onboardingData, fakeLogger);
     expect(result.onboarding_completed).toBe(true);
     expect(result.job_role).toBe('Engineer');
     expect(result.company_size).toBe('11-50');
@@ -46,8 +62,9 @@ describe('CompleteOnboardingUseCase.execute', () => {
     };
 
     const useCase = new CompleteOnboardingUseCase(mockRepo);
+    const fakeLogger = makeLogger();
 
-    await expect(useCase.execute('clerk_missing', onboardingData)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(useCase.execute('clerk_missing', onboardingData, fakeLogger)).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('(EC005) propagates DB error when repo throws it', async () => {
@@ -59,8 +76,9 @@ describe('CompleteOnboardingUseCase.execute', () => {
     };
 
     const useCase = new CompleteOnboardingUseCase(mockRepo);
+    const fakeLogger = makeLogger();
 
-    await expect(useCase.execute('clerk_abc', onboardingData)).rejects.toThrow('connection refused');
+    await expect(useCase.execute('clerk_abc', onboardingData, fakeLogger)).rejects.toThrow('connection refused');
   });
 
   it('(EC006) resolves with updated profile when user already has onboarding_completed true', async () => {
@@ -78,11 +96,12 @@ describe('CompleteOnboardingUseCase.execute', () => {
     };
 
     const useCase = new CompleteOnboardingUseCase(mockRepo);
+    const fakeLogger = makeLogger();
     const result = await useCase.execute('clerk_abc', {
       job_role: 'Manager',
       company_size: '51-200',
       primary_use_case: 'Analytics',
-    });
+    }, fakeLogger);
 
     expect(result.onboarding_completed).toBe(true);
     expect(result.job_role).toBe('Manager');

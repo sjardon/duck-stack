@@ -131,6 +131,7 @@ describe('mobbexWebhookRoutes — payload parsing', () => {
     expect(mockDispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'payment.success' }),
       expect.anything(),
+      expect.anything(),
     );
   });
 });

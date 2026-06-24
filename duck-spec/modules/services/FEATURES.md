@@ -195,7 +195,7 @@ Que todos los archivos de `apps/services/src/` cumplan la regla de naming camelC
 
 ## SERVICES-005 — Propagate request-bound logger across module layers
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

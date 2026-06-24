@@ -38,8 +38,10 @@ export interface UpsertRefundResult {
   transactionId: string | null;
 }
 
+import type { BaseLogger } from 'pino';
+
 export interface IMobbexBillingSyncRepository {
-  recordEvent(input: RecordEventInput): Promise<void>;
-  updateTransactionStatus(input: UpdateTransactionStatusInput): Promise<UpdateTransactionStatusResult>;
-  upsertRefundAndMaybeMarkTransactionRefunded(input: UpsertRefundInput): Promise<UpsertRefundResult>;
+  recordEvent(input: RecordEventInput, logger: BaseLogger): Promise<void>;
+  updateTransactionStatus(input: UpdateTransactionStatusInput, logger: BaseLogger): Promise<UpdateTransactionStatusResult>;
+  upsertRefundAndMaybeMarkTransactionRefunded(input: UpsertRefundInput, logger: BaseLogger): Promise<UpsertRefundResult>;
 }

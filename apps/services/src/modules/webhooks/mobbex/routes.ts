@@ -57,7 +57,7 @@ export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
       const refundAmount = (data['amount'] as number | undefined) ?? null;
 
       // Dispatch to handlers (R002, R003, R007-R011, EC001-EC006)
-      const outcome = await dispatchMobbexEvent(payload, repository);
+      const outcome = await dispatchMobbexEvent(payload, repository, request.log);
 
       // Structured log (NF002, NF003) — no secret, no full payload, no PII
       request.log.info(

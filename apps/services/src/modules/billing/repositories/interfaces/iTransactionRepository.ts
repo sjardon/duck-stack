@@ -1,3 +1,4 @@
+import type { BaseLogger } from 'pino';
 import type { TransactionEntity } from '../../entities/transactionEntity.js';
 import type { RefundEntity } from '../../entities/refundEntity.js';
 
@@ -22,18 +23,20 @@ export interface ListTransactionsQuery {
 }
 
 export interface ITransactionRepository {
-  create(input: CreateTransactionData): Promise<TransactionEntity>;
-  findById(id: string): Promise<TransactionEntity | null>;
+  create(input: CreateTransactionData, logger: BaseLogger): Promise<TransactionEntity>;
+  findById(id: string, logger: BaseLogger): Promise<TransactionEntity | null>;
   findByIdempotencyKey(
     key: string,
     userId: string,
     orgId: string | null,
+    logger: BaseLogger,
   ): Promise<TransactionEntity | null>;
-  updateFailureReason(id: string, reason: string): Promise<void>;
+  updateFailureReason(id: string, reason: string, logger: BaseLogger): Promise<void>;
   updateProviderData(
     id: string,
     data: { providerTransactionId: string; checkoutUrl: string },
+    logger: BaseLogger,
   ): Promise<void>;
-  list(query: ListTransactionsQuery): Promise<{ rows: TransactionEntity[]; nextCursor: string | null }>;
-  getRefundsByTransactionId(transactionId: string): Promise<RefundEntity[]>;
+  list(query: ListTransactionsQuery, logger: BaseLogger): Promise<{ rows: TransactionEntity[]; nextCursor: string | null }>;
+  getRefundsByTransactionId(transactionId: string, logger: BaseLogger): Promise<RefundEntity[]>;
 }

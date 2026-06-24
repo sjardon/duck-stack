@@ -22,7 +22,7 @@ export async function updateUserProfileHandler(
   const repo = new UserDBRepository(db);
   const useCase = new UpdateUserProfileUseCase(repo);
 
-  const profile = await useCase.execute(request.userId!, body);
+  const profile = await useCase.execute(request.userId!, body, request.log);
 
   return reply.send({ data: profile });
 }

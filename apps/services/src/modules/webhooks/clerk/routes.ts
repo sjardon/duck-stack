@@ -62,7 +62,7 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
     }
 
     // Dispatch to the appropriate event handler (R009–R012, EC002)
-    await dispatchClerkEvent(event, repository);
+    await dispatchClerkEvent(event, repository, request.log);
 
     // Success (R008, NF002)
     return reply.status(200).send({ received: true });

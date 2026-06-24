@@ -1,13 +1,13 @@
 import type { Sql } from 'postgres';
+import type { BaseLogger } from 'pino';
 import type { UserProfile } from '@repo/types';
 import type { IUserRepository } from './interfaces/iUserRepository.js';
 import { NotFoundError } from '../../../shared/errors.js';
-import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class UserDBRepository implements IUserRepository {
   constructor(private readonly sql: Sql) {}
 
-  async findByClerkUserId(clerkUserId: string): Promise<UserProfile | null> {
+  async findByClerkUserId(clerkUserId: string, logger: BaseLogger): Promise<UserProfile | null> {
     const start = Date.now();
     const rows = await this.sql<
       Array<{
@@ -49,6 +49,7 @@ export class UserDBRepository implements IUserRepository {
   async updatePreferences(
     clerkUserId: string,
     patch: { locale?: string | null; timezone?: string | null },
+    logger: BaseLogger,
   ): Promise<UserProfile> {
     const updates: Record<string, string | null> = {};
     const columns: string[] = [];
@@ -103,6 +104,7 @@ export class UserDBRepository implements IUserRepository {
   async completeOnboarding(
     clerkUserId: string,
     data: { job_role: string; company_size: string; primary_use_case: string },
+    logger: BaseLogger,
   ): Promise<UserProfile> {
     const start = Date.now();
     const rows = await this.sql<

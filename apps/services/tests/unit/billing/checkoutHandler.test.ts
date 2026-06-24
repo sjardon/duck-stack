@@ -28,6 +28,7 @@ function makeRequest(body: unknown, userId = 'user-001', headers: Record<string,
     userId,
     orgId: null,
     headers,
+    log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
   } as unknown as FastifyRequest;
 }
 
@@ -128,6 +129,7 @@ describe('checkoutHandler — Idempotency-Key header passthrough (R012)', () => 
       null,
       expect.objectContaining({ amount: 1000 }),
       'my-idem-key',
+      expect.anything(),
     );
   });
 });
