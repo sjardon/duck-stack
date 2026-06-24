@@ -82,14 +82,14 @@ export class MobbexProvider implements PaymentProvider {
   async createSubscription(
     planId: string,
     subscriberRef: string,
-  ): Promise<{ subscriptionId: string }> {
+  ): Promise<{ subscriptionId: string; checkoutUrl: string }> {
     const response = await this.fetchWithTimeout(`${MOBBEX_BASE_URL}/2.0/subscriptions`, {
       method: 'POST',
       body: JSON.stringify({ plan_id: planId, reference: subscriberRef }),
     });
 
-    const payload = (await response.json()) as { data: { id: string } };
-    return { subscriptionId: payload.data.id };
+    const payload = (await response.json()) as { data: { id: string; url: string } };
+    return { subscriptionId: payload.data.id, checkoutUrl: payload.data.url };
   }
 
   async cancelSubscription(subscriptionId: string): Promise<void> {
