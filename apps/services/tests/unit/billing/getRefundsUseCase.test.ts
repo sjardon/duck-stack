@@ -1,8 +1,8 @@
 import { GetRefundsUseCase } from '../../../src/modules/billing/useCases/getRefundsUseCase.js';
 import { NotFoundError, ForbiddenError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
-import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
-import type { RefundEntity } from '../../../src/modules/billing/entities/refund.entity.js';
+import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
+import type { RefundEntity } from '../../../src/modules/billing/entities/refundEntity.js';
 
 const userTransaction: TransactionEntity = {
   id: 'uuid-001',

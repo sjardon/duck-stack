@@ -149,7 +149,7 @@ Que todas las lecturas de `process.env` queden centralizadas en archivos bajo `s
 
 ## SERVICES-004 — Normalize file naming to lowercase camelCase
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

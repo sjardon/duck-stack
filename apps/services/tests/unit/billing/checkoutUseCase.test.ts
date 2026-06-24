@@ -1,8 +1,8 @@
 import { CheckoutUseCase } from '../../../src/modules/billing/useCases/checkoutUseCase.js';
 import { ProviderError } from '../../../src/shared/errors.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
-import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
-import type { CheckoutBodyType } from '../../../src/modules/billing/dtos/checkout.dto.js';
+import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
+import type { CheckoutBodyType } from '../../../src/modules/billing/dtos/checkoutDto.js';
 
 // Prevent module-level DB connection from firing
 jest.mock('../../../src/shared/infrastructure/db.js', () => ({ db: {} }));

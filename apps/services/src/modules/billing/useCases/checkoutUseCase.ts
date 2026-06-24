@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { resolveProvider } from '../providers/resolveProvider.js';
 import { ProviderError } from '../../../shared/errors.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
-import type { CheckoutBodyType } from '../dtos/checkout.dto.js';
+import type { CheckoutBodyType } from '../dtos/checkoutDto.js';
 
 export class CheckoutUseCase {
   constructor(private readonly repo: ITransactionRepository) {}

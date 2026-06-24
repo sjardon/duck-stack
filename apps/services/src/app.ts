@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import errorHandlerPlugin from './shared/plugins/error-handler.js';
+import errorHandlerPlugin from './shared/plugins/errorHandler.js';
 import corsPlugin from './shared/plugins/cors.js';
 import helmetPlugin from './shared/plugins/helmet.js';
-import clerkAuthPlugin from './shared/plugins/clerk-auth.plugin.js';
+import clerkAuthPlugin from './shared/plugins/clerkAuthPlugin.js';
 import healthRoutes from './modules/health/routes.js';
 import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
 import mobbexWebhookRoutes from './modules/webhooks/mobbex/routes.js';

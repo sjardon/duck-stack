@@ -22,9 +22,12 @@ apps/services/
     shared/
       errors.ts                         # DomainError base class + typed errors
       plugins/
-        error-handler.ts                # Fastify error-handler plugin
+        errorHandler.ts                 # Fastify error-handler plugin
         cors.ts                         # CORS plugin
         helmet.ts                       # Helmet security-headers plugin
+        clerkAuthPlugin.ts              # Clerk JWT verification plugin
+        requireAuth.ts                  # Auth preHandler
+        requireOrg.ts                   # Org-scope preHandler
       infrastructure/
         logger.ts                       # Standalone Pino logger instance
         db.ts                           # postgres.js singleton client
@@ -50,7 +53,7 @@ A standalone `pino()` instance is exported from `shared/infrastructure/logger.ts
 | `ValidationError` | `VALIDATION_ERROR` | 400 |
 | `UnauthorizedError` | `UNAUTHORIZED` | 401 |
 
-The error-handler plugin (`shared/plugins/error-handler.ts`) uses `fastify.setErrorHandler` to intercept any `DomainError` and reply with `{ code, message }` at the matching HTTP status. All other errors fall through to Fastify's default handler.
+The error-handler plugin (`shared/plugins/errorHandler.ts`) uses `fastify.setErrorHandler` to intercept any `DomainError` and reply with `{ code, message }` at the matching HTTP status. All other errors fall through to Fastify's default handler.
 
 ### Security plugins
 
@@ -69,15 +72,19 @@ All `process.env` reads in application code are eliminated in favor of typed con
 | `src/shared/configs/authConfig.ts` | `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` |
 | `src/shared/configs/mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
 
-`app.ts`, `server.ts`, `shared/plugins/cors.ts`, `shared/infrastructure/logger.ts`, `shared/plugins/clerk-auth.plugin.ts`, `modules/webhooks/clerk/routes.ts`, and `modules/billing/providers/resolveProvider.ts` all import from these config objects instead of reading `process.env` directly.
+`app.ts`, `server.ts`, `shared/plugins/cors.ts`, `shared/infrastructure/logger.ts`, `shared/plugins/clerkAuthPlugin.ts`, `modules/webhooks/clerk/routes.ts`, and `modules/billing/providers/resolveProvider.ts` all import from these config objects instead of reading `process.env` directly.
 
-Two documented exceptions are preserved and not migrated: `shared/infrastructure/db.ts` reads `DATABASE_URL` directly, and `shared/plugins/clerk-auth.plugin.ts` reads `CLERK_SECRET_KEY` directly. All defaults, fail-fast error messages, and startup error timing are identical to the pre-centralization state. `MOBBEX_TEST_MODE` accepts both the string `"true"` and `"1"` as enabled.
+Two documented exceptions are preserved and not migrated: `shared/infrastructure/db.ts` reads `DATABASE_URL` directly, and `shared/plugins/clerkAuthPlugin.ts` reads `CLERK_SECRET_KEY` directly. All defaults, fail-fast error messages, and startup error timing are identical to the pre-centralization state. `MOBBEX_TEST_MODE` accepts both the string `"true"` and `"1"` as enabled.
 
 ### Postgres client (SERVICES-002)
 
 `shared/infrastructure/db.ts` exports a singleton `Sql` instance created from `DATABASE_URL` using `postgres.js`. If `DATABASE_URL` is absent or empty the module throws a descriptive error synchronously at startup, preventing the Fastify server from binding. Infrastructure code (repositories) imports this singleton directly. `@supabase/supabase-js` is no longer a runtime dependency of `apps/services`; all database operations run as direct TCP queries with no HTTP intermediary.
 
 `UserDBRepository` and `ClerkSyncRepository` accept a `postgres.js` `Sql` instance via constructor injection and execute all queries as tagged-template SQL calls. All observable HTTP response shapes, side effects, and warning behaviors are preserved from the previous Supabase-backed implementation. `createMembership` performs three sequential queries — user lookup, organization lookup, and membership insert — emitting distinct warning logs when the user or organization row is not found, without throwing.
+
+### File naming convention (SERVICES-004)
+
+All files under `apps/services/src/` follow lowercase camelCase naming with no dot-separated suffixes (other than `.ts` and `.test.ts`) and no hyphens. Plugin files in `shared/plugins/` use camelCase without a `.plugin.ts` suffix (`errorHandler.ts`, `clerkAuthPlugin.ts`, `requireAuth.ts`, `requireOrg.ts`). Entity files in each module's `entities/` directory carry no `.entity.ts` suffix (`transactionEntity.ts`, `refundEntity.ts`, `subscriptionPlanEntity.ts`, `userEntity.ts`). DTO files in each module's `dtos/` directory carry no `.dto.ts` suffix (`checkoutDto.ts`, `completeOnboardingDto.ts`, `updateProfileDto.ts`). All import paths in source and test files reference these normalized names. No class, function, interface, or type name was altered; only file names and import specifiers were updated.
 
 ### Health module
 

@@ -1,6 +1,6 @@
 import { TransactionDBRepository } from '../../../src/modules/billing/repositories/transactionDBRepository.js';
-import type { TransactionEntity } from '../../../src/modules/billing/entities/transaction.entity.js';
-import type { RefundEntity } from '../../../src/modules/billing/entities/refund.entity.js';
+import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
+import type { RefundEntity } from '../../../src/modules/billing/entities/refundEntity.js';
 import type { CreateTransactionData } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 
 const baseEntity: TransactionEntity = {

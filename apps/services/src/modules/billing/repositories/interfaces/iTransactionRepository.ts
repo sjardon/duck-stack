@@ -1,5 +1,5 @@
-import type { TransactionEntity } from '../../entities/transaction.entity.js';
-import type { RefundEntity } from '../../entities/refund.entity.js';
+import type { TransactionEntity } from '../../entities/transactionEntity.js';
+import type { RefundEntity } from '../../entities/refundEntity.js';
 
 export interface CreateTransactionData {
   id: string;
