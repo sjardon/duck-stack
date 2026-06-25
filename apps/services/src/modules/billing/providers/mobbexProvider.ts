@@ -6,6 +6,7 @@ import type {
   WebhookEvent,
 } from '@repo/types';
 import { ProviderError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 
 export interface MobbexConfig {
   apiKey: string;
@@ -175,10 +176,12 @@ export class MobbexProvider implements PaymentProvider {
         throw err;
       }
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new ProviderError(`Request to Mobbex timed out after ${this.config.timeoutMs}ms`, 502);
+        logger.error({ err }, 'MobbexProvider.fetchWithTimeout timed out');
+        throw new ProviderError(`Request to Mobbex timed out after ${this.config.timeoutMs}ms`, 502, err);
       }
+      logger.error({ err }, 'MobbexProvider.fetchWithTimeout network error');
       const message = err instanceof Error ? err.message : 'Unknown network error';
-      throw new ProviderError(`Network error calling Mobbex: ${message}`, 502);
+      throw new ProviderError(`Network error calling Mobbex: ${message}`, 502, err);
     } finally {
       clearTimeout(timer);
     }
@@ -189,8 +192,13 @@ export class MobbexProvider implements PaymentProvider {
     try {
       const body = (await response.json()) as { error?: string };
       errorCode = body.error;
-    } catch {
-      // ignore JSON parse failure
+    } catch (parseErr: unknown) {
+      // JSON parse failed — body is discarded. This is intentional: a malformed error body
+      // from the provider should not prevent the correct HTTP status from being mapped.
+      logger.warn(
+        { err: parseErr, status: response.status },
+        'MobbexProvider.handleErrorResponse: failed to parse error body; using HTTP status fallback',
+      );
     }
 
     const message = errorCode ?? `Mobbex responded with HTTP ${response.status}`;

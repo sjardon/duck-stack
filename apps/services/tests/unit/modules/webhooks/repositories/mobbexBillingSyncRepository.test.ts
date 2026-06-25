@@ -1,5 +1,26 @@
+// Mock the static logger so we can spy on its methods
+jest.mock('../../../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { MobbexBillingSyncRepository } from '../../../../../src/modules/webhooks/repositories/mobbexBillingSyncRepository.js';
+import { ProviderError } from '../../../../../src/shared/errors.js';
+import { logger } from '../../../../../src/shared/infrastructure/logger.js';
 import type { UpsertRefundInput } from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 // Helpers to build sql mocks
 
@@ -36,6 +57,50 @@ function makeSimpleSqlMock(returnValue: unknown = []) {
     },
   );
   return { sql, mockFn };
+}
+
+function makeRejectingSimpleSqlMock(error: Error) {
+  const mockFn = jest.fn().mockRejectedValue(error);
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ..._values: unknown[]) => mockFn(strings, ..._values),
+    mockFn,
+    {
+      json: (val: unknown) => val,
+      begin: jest.fn(),
+    },
+  );
+  return { sql, mockFn };
+}
+
+/**
+ * Creates a sql mock where the first `callsBeforeError` inner sql calls resolve
+ * and the next call rejects with `error`. Used to test inner try/catch in sql.begin blocks.
+ */
+function makeSqlBeginWithInnerReject(error: Error, callsBeforeError: number = 0) {
+  const innerMockFn = jest.fn();
+  for (let i = 0; i < callsBeforeError; i++) {
+    innerMockFn.mockResolvedValueOnce([]);
+  }
+  innerMockFn.mockRejectedValueOnce(error);
+
+  const innerSql = (strings: TemplateStringsArray, ..._values: unknown[]) =>
+    innerMockFn(strings, ..._values);
+
+  const beginMock = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+    return cb(innerSql);
+  });
+
+  const outerMockFn = jest.fn().mockResolvedValue([]);
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ..._values: unknown[]) => outerMockFn(strings, ..._values),
+    outerMockFn,
+    {
+      begin: beginMock,
+      json: (val: unknown) => val,
+    },
+  );
+
+  return { sql, outerMockFn, innerMockFn, beginMock };
 }
 
 // T001 / T005 — recordEvent
@@ -357,5 +422,170 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
     expect(secondResult.transactionId).toBe('uuid-tx-001');
     // 3 inner SQL calls for the second delivery too
     expect(innerMockFn).toHaveBeenCalledTimes(3);
+  });
+});
+
+// T011 — SQL error paths for recordEvent and transactional sub-queries
+
+describe('MobbexBillingSyncRepository.recordEvent — SQL error path (R001, R002, R007, NF001, NF002, NF003)', () => {
+  it('WHEN sql rejects THEN logger.error is called once with repository: \'MobbexBillingSyncRepository\' and method: \'recordEvent\'', async () => {
+    const rawError = new Error('insert failed');
+    const { sql } = makeRejectingSimpleSqlMock(rawError);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    await expect(
+      repo.recordEvent({ eventType: 'payment.success', payload: {}, transactionId: null }),
+    ).rejects.toThrow();
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'MobbexBillingSyncRepository',
+        method: 'recordEvent',
+      }),
+      expect.any(String),
+    );
+  });
+
+  it('WHEN sql rejects THEN re-throws ProviderError with statusCode 502 and originalError', async () => {
+    const rawError = new Error('timeout');
+    const { sql } = makeRejectingSimpleSqlMock(rawError);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    let thrown: unknown;
+    try {
+      await repo.recordEvent({ eventType: 'payment.success', payload: {}, transactionId: null });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(ProviderError);
+    expect((thrown as ProviderError).statusCode).toBe(502);
+    expect((thrown as ProviderError).originalError).toBe(rawError);
+  });
+});
+
+describe('MobbexBillingSyncRepository.updateTransactionStatus — SELECT by provider_transaction_id sub-query error (R004, EC001)', () => {
+  it('WHEN the first SELECT sub-query rejects THEN logger.error is called exactly once and ProviderError(502) is thrown', async () => {
+    const rawError = new Error('select by ptxId failed');
+    // 0 calls succeed before the error, so the first SELECT call fails immediately
+    const { sql } = makeSqlBeginWithInnerReject(rawError, 0);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    let thrown: unknown;
+    try {
+      await repo.updateTransactionStatus({ providerTransactionId: 'ptx-001', reference: null, status: 'approved' });
+    } catch (e) {
+      thrown = e;
+    }
+
+    // logger.error must be called exactly once (not double-logged by outer catch)
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(thrown).toBeInstanceOf(ProviderError);
+    expect((thrown as ProviderError).statusCode).toBe(502);
+    expect((thrown as ProviderError).originalError).toBe(rawError);
+  });
+});
+
+describe('MobbexBillingSyncRepository.updateTransactionStatus — UPDATE sub-query error (R004, EC001)', () => {
+  it('WHEN the UPDATE sub-query rejects THEN logger.error is called exactly once and ProviderError(502) is thrown', async () => {
+    const rawError = new Error('update failed');
+    const pendingTx = { id: 'uuid-tx-001', status: 'pending' };
+    const innerMockFn = jest.fn()
+      .mockResolvedValueOnce([pendingTx])  // SELECT by provider_transaction_id
+      .mockRejectedValueOnce(rawError);    // UPDATE fails
+
+    const innerSql = (strings: TemplateStringsArray, ..._values: unknown[]) =>
+      innerMockFn(strings, ..._values);
+
+    const beginMock = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      return cb(innerSql);
+    });
+
+    const outerMockFn = jest.fn().mockResolvedValue([]);
+    const sql = Object.assign(
+      (strings: TemplateStringsArray, ..._values: unknown[]) => outerMockFn(strings, ..._values),
+      outerMockFn,
+      { begin: beginMock, json: (val: unknown) => val },
+    );
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    let thrown: unknown;
+    try {
+      await repo.updateTransactionStatus({ providerTransactionId: 'ptx-001', reference: null, status: 'approved' });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(thrown).toBeInstanceOf(ProviderError);
+    expect((thrown as ProviderError).statusCode).toBe(502);
+    expect((thrown as ProviderError).originalError).toBe(rawError);
+  });
+});
+
+describe('MobbexBillingSyncRepository.updateTransactionStatus — reference fallback SELECT error (EC002)', () => {
+  it('WHEN the reference fallback SELECT rejects THEN logger.error includes reference in the payload', async () => {
+    const rawError = new Error('reference select failed');
+    // First call (SELECT by ptxId) returns empty, second call (SELECT by reference) fails
+    const innerMockFn = jest.fn()
+      .mockResolvedValueOnce([])          // SELECT by provider_transaction_id returns empty
+      .mockRejectedValueOnce(rawError);   // SELECT by reference fails
+
+    const innerSql = (strings: TemplateStringsArray, ..._values: unknown[]) =>
+      innerMockFn(strings, ..._values);
+
+    const beginMock = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      return cb(innerSql);
+    });
+
+    const outerMockFn = jest.fn().mockResolvedValue([]);
+    const sql = Object.assign(
+      (strings: TemplateStringsArray, ..._values: unknown[]) => outerMockFn(strings, ..._values),
+      outerMockFn,
+      { begin: beginMock, json: (val: unknown) => val },
+    );
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    await expect(
+      repo.updateTransactionStatus({ providerTransactionId: 'ptx-001', reference: 'ref-001', status: 'failed' }),
+    ).rejects.toThrow();
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reference: 'ref-001',
+      }),
+      expect.any(String),
+    );
+  });
+});
+
+describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded — SELECT transaction sub-query error (R004, EC001)', () => {
+  it('WHEN the SELECT-transaction sub-query rejects THEN logger.error is called exactly once and ProviderError(502) is thrown', async () => {
+    const rawError = new Error('select transaction failed');
+    // First inner call (SELECT by ptxId) fails immediately
+    const { sql } = makeSqlBeginWithInnerReject(rawError, 0);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    let thrown: unknown;
+    try {
+      await repo.upsertRefundAndMaybeMarkTransactionRefunded({
+        providerTransactionId: 'ptx-001',
+        providerRefundId: 'ref-001',
+        amount: 500,
+        reason: null,
+        refundStatus: 'approved',
+      });
+    } catch (e) {
+      thrown = e;
+    }
+
+    // logger.error called exactly once (not double-logged by outer catch)
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(thrown).toBeInstanceOf(ProviderError);
+    expect((thrown as ProviderError).statusCode).toBe(502);
+    expect((thrown as ProviderError).originalError).toBe(rawError);
   });
 });
