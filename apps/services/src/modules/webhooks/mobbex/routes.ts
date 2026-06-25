@@ -5,6 +5,7 @@ import { db } from '../../../shared/infrastructure/db.js';
 import { MobbexBillingSyncRepository } from '../repositories/mobbexBillingSyncRepository.js';
 import { dispatchMobbexEvent } from './mobbexEventHandlers.js';
 import { UnauthorizedError, ValidationError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 
 export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
   const webhookSecret = mobbexConfig.webhookSecret;
@@ -42,7 +43,9 @@ export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
       let payload: Record<string, unknown>;
       try {
         payload = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
-      } catch {
+      } catch (parseErr) {
+        // R006, EC006: log the parse failure before throwing so traces are complete
+        logger.warn({ err: parseErr }, 'mobbexWebhookRoutes: failed to parse request body as JSON');
         throw new ValidationError('Request body is not valid JSON');
       }
 

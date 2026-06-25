@@ -2,6 +2,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { verifyToken } from '@clerk/backend';
 import { authConfig } from '../configs/authConfig.js';
+import { logger } from '../infrastructure/logger.js';
 
 export default fp(async function clerkAuthPlugin(fastify: FastifyInstance) {
   const jwtKey = authConfig.clerkJwtKey;
@@ -33,8 +34,11 @@ export default fp(async function clerkAuthPlugin(fastify: FastifyInstance) {
       const payload = await verifyToken(token, jwtKey ? { jwtKey } : { secretKey });
       request.userId = payload.sub;
       request.orgId = (payload as Record<string, unknown>)['org_id'] as string | null ?? null;
-    } catch {
-      // Expired or invalid JWT — leave userId/orgId unset (EC003).
+    } catch (err) {
+      // Non-critical silent fail: an invalid or expired JWT leaves userId/orgId unset.
+      // Downstream requireAuth / requireOrg preHandlers decide whether the route requires auth.
+      // R011, R013: log at warn so traces are complete; do not re-throw (EC004).
+      logger.warn({ err }, 'clerkAuthPlugin: JWT verification failed; request proceeds without userId');
     }
   });
 });

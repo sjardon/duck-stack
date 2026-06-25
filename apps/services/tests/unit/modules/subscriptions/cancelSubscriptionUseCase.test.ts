@@ -1,10 +1,26 @@
+// Mock logger before any imports
+jest.mock('../../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { CancelSubscriptionUseCase } from '../../../../src/modules/subscriptions/useCases/cancelSubscriptionUseCase.js';
 import { NotFoundError, ProviderError } from '../../../../src/shared/errors.js';
+import { logger } from '../../../../src/shared/infrastructure/logger.js';
 import type { ISubscriptionRepository } from '../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 import type { SubscriptionEntity } from '../../../../src/modules/subscriptions/entities/subscriptionEntity.js';
 import type { PaymentProvider } from '@repo/types';
 
 jest.mock('../../../../src/shared/infrastructure/db.js', () => ({ db: {} }));
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 const activeSubscription: SubscriptionEntity = {
   id: 'sub-001',
@@ -119,5 +135,49 @@ describe('CancelSubscriptionUseCase — provider 404 treated as success (EC001)'
     const useCase = new CancelSubscriptionUseCase(repo, provider);
 
     await expect(useCase.execute('user-001', null, 'sub-001', { atPeriodEnd: true })).rejects.toThrow(ProviderError);
+  });
+});
+
+// T011 — R007, R008, R010, EC003: logger.warn on ProviderError 400 and returns local result
+
+describe('CancelSubscriptionUseCase — logger.warn on ProviderError 400 silent-fail (R007, R008, R010, EC003)', () => {
+  it('WHEN provider throws ProviderError with statusCode 400 THEN logger.warn is called and use case returns locally-cancelled subscription', async () => {
+    const providerErr = new ProviderError('subscription not found', 400);
+    const cancelledLocally = { ...activeSubscription, status: 'canceled' as const, canceled_at: '2026-06-24T12:00:00.000Z' };
+    const repo = makeRepo({
+      cancelImmediately: jest.fn().mockResolvedValue(cancelledLocally),
+    });
+    const provider = makeProvider({
+      cancelSubscription: jest.fn().mockRejectedValue(providerErr),
+    });
+    const useCase = new CancelSubscriptionUseCase(repo, provider);
+
+    const result = await useCase.execute('user-001', null, 'sub-001', { atPeriodEnd: false });
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.warn.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBe(providerErr);
+    expect(result).toEqual(cancelledLocally);
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+});
+
+// T012 — R007, R009: logger.error before re-throw on non-400 failure
+
+describe('CancelSubscriptionUseCase — logger.error before re-throw on non-400 failure (R007, R009)', () => {
+  it('WHEN provider throws ProviderError with statusCode 502 THEN logger.error is called before re-throw', async () => {
+    const providerErr = new ProviderError('upstream failure', 502);
+    const repo = makeRepo();
+    const provider = makeProvider({
+      cancelSubscription: jest.fn().mockRejectedValue(providerErr),
+    });
+    const useCase = new CancelSubscriptionUseCase(repo, provider);
+
+    await expect(useCase.execute('user-001', null, 'sub-001', { atPeriodEnd: true })).rejects.toThrow(ProviderError);
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.error.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBe(providerErr);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });

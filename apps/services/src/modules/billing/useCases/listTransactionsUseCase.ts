@@ -1,4 +1,5 @@
 import { ValidationError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
 import type { TransactionListResponse } from '@repo/types';
 
@@ -27,9 +28,13 @@ export class ListTransactionsUseCase {
         }
       } catch (err) {
         if (err instanceof ValidationError) {
+          // R007, R008: log at warn before re-throwing — cursor is non-sensitive (no PII)
+          logger.warn({ err }, 'ListTransactionsUseCase: invalid cursor (re-throwing)');
           throw err;
         }
-        throw new ValidationError('Invalid cursor');
+        // R007, R008: log at warn before throwing transformed ValidationError
+        logger.warn({ err }, 'ListTransactionsUseCase: cursor decode/parse failed, throwing ValidationError');
+        throw new ValidationError('Invalid cursor', err instanceof Error ? err : undefined);
       }
     }
 

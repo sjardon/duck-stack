@@ -1,5 +1,15 @@
+// Mock logger before any imports so spies are wired before the module loads
+jest.mock('../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { CheckoutUseCase } from '../../../src/modules/billing/useCases/checkoutUseCase.js';
 import { ProviderError } from '../../../src/shared/errors.js';
+import { logger } from '../../../src/shared/infrastructure/logger.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
 import type { CheckoutBodyType } from '../../../src/modules/billing/dtos/checkoutDto.js';
@@ -14,6 +24,12 @@ jest.mock('../../../src/modules/billing/providers/resolveProvider.js', () => ({
     createCheckout: mockCreateCheckout,
   }),
 }));
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 const pendingEntity: TransactionEntity = {
   id: 'uuid-001',
@@ -123,6 +139,51 @@ describe('CheckoutUseCase — provider failure (R005, EC004)', () => {
     expect(repo.updateFailureReason).toHaveBeenCalledWith(pendingEntity.id, providerErr.message);
     // Row stays in pending status (no status update called)
     expect(repo.updateProviderData).not.toHaveBeenCalled();
+  });
+});
+
+// T009 — R007, R008, R009: logger is called before re-throw
+
+describe('CheckoutUseCase — logging before re-throw on provider failure (R007, R008, R009)', () => {
+  it('WHEN provider throws ProviderError with statusCode 502 THEN logger.error is called before re-throw', async () => {
+    const providerErr = new ProviderError('Upstream failure', 502);
+    mockCreateCheckout.mockRejectedValue(providerErr);
+    const repo = makeRepo();
+    const useCase = new CheckoutUseCase(repo);
+
+    await expect(useCase.execute('user-001', null, validBody)).rejects.toThrow(ProviderError);
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.error.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBe(providerErr);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('WHEN provider throws ProviderError with statusCode 400 THEN logger.warn is called before re-throw', async () => {
+    const providerErr = new ProviderError('Bad request to provider', 400);
+    mockCreateCheckout.mockRejectedValue(providerErr);
+    const repo = makeRepo();
+    const useCase = new CheckoutUseCase(repo);
+
+    await expect(useCase.execute('user-001', null, validBody)).rejects.toThrow(ProviderError);
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.warn.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBe(providerErr);
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('WHEN provider throws a generic Error (non-DomainError) THEN logger.error is called before re-throw', async () => {
+    const genericErr = new Error('Unknown failure');
+    mockCreateCheckout.mockRejectedValue(genericErr);
+    const repo = makeRepo();
+    const useCase = new CheckoutUseCase(repo);
+
+    await expect(useCase.execute('user-001', null, validBody)).rejects.toThrow(Error);
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.error.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBe(genericErr);
   });
 });
 

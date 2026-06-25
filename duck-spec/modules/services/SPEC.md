@@ -131,6 +131,38 @@ Every external call in the six database repositories and the `mobbexProvider` ad
 
 **Coverage.** The pattern is applied to all six repositories: `UserDBRepository`, `SubscriptionDBRepository`, `SubscriptionPlanDBRepository`, `TransactionDBRepository`, `ClerkSyncRepository`, and `MobbexBillingSyncRepository`. Unit tests for each repository and for `MobbexProvider` assert that SQL or network failures produce a `ProviderError` with `statusCode 502` and `originalError` pointing to the original cause, and that `logger.error` is called with the expected repository and method fields.
 
+### Use case, handler and webhook route error compliance (SERVICES-009)
+
+Every handler, webhook route, use case, and plugin in the orchestration layer satisfies the three-outcome error rule established in BACKEND.md: every `catch` block ends in log + re-throw, log + transform, or log + handle with a justifying comment. No orchestration-layer site calls `reply.status()` directly — all HTTP error serialization is delegated to `errorHandler`.
+
+**Handler validation.** `completeOnboardingHandler` and `updateUserProfileHandler` no longer call `reply.status(400).send(...)` from a `ZodError` catch branch. Each handler retains its `try/catch` solely to distinguish `ZodError` from other parse-time errors; when a `ZodError` is caught it throws `new ValidationError(err.issues[0]?.message, err)` so `errorHandler` owns the 400 response serialization. The observable HTTP contract (400, `{ code: 'VALIDATION_ERROR', message }`) is unchanged.
+
+**Clerk webhook route.** The missing-Svix-header guard throws `new ValidationError('Missing required Svix headers')` instead of calling `reply.status(400)`. The signature verification catch logs at `warn` level and throws `new ValidationError('Webhook signature verification failed', err)`. Both paths now produce HTTP 400 `{ code: 'VALIDATION_ERROR', message }` via `errorHandler`, replacing the previous manual `{ error: ... }` 400 response. The signature verification failure remains `ValidationError` (HTTP 400) rather than `UnauthorizedError` (HTTP 401) — changing to 401 is deferred and requires a separate design decision.
+
+**Mobbex webhook route.** The JSON parse catch emits `logger.warn({ err: parseErr }, '…')` before throwing `ValidationError`, satisfying the logging requirement for every catch block and producing a traceable log entry when a malformed body arrives.
+
+**Use case catch logging.** The following use cases gain structured log calls before every re-throw, transform, or silent-fail path:
+
+| Use case | Change |
+|---|---|
+| `checkoutUseCase` | `logger.warn` for `DomainError` 4xx; `logger.error` for `DomainError` ≥500 and non-`DomainError`; before the existing `throw err` |
+| `cancelSubscriptionUseCase` | `logger.warn` before the `return updated` silent-fail path (provider 400 case); `logger.error` before the re-throw path; inline comment justifies the non-critical silent-fail |
+| `listTransactionsUseCase` | `logger.warn` in both cursor decode/parse catch branches before re-throwing; `originalError` passed when constructing `ValidationError` |
+
+**Logging level rule.** The level decision is uniform across every modified catch: `DomainError` with `statusCode < 500` → `logger.warn`; `DomainError` with `statusCode >= 500` or non-`DomainError` → `logger.error` with stack. This matches the rule in BACKEND.md and the behavior of `errorHandler`.
+
+**Silent-fail sites.** Every retained silent-fail carries an inline code comment explaining why the failure is non-critical and why the caller can continue:
+
+| Site | Silent-fail reason | Comment added |
+|---|---|---|
+| `cancelSubscriptionUseCase` (provider 400) | Provider already cancelled on its side; local record is correct | Yes |
+| `clerkAuthPlugin` (JWT failure) | Invalid or expired JWT leaves `userId`/`orgId` unset; downstream `requireAuth`/`requireOrg` decide whether the route requires auth | Yes |
+| `mobbexProvider.handleErrorResponse` (body parse fail) | Provider error body is not JSON; mapping continues with the HTTP status received | Verified/reinforced |
+
+**`requestId` in catch logs.** The static Pino logger from `shared/infrastructure/logger.ts` is used at every catch site. The `AsyncLocalStorage` mixin (SERVICES-005) injects `requestId` automatically — no per-request child logger is introduced.
+
+**HTTP contract invariant.** Every 4xx and 5xx response originating in the affected sites now carries the body `{ code, message }` for `DomainError` instances and `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` for non-`DomainError` instances, always serialized by `errorHandler`. The previous `{ error: ... }` shape emitted by the Clerk webhook route for missing headers is replaced by the standard `{ code: 'VALIDATION_ERROR', message }` shape.
+
 ### Container image
 
 `apps/services/Dockerfile` uses a two-stage build:

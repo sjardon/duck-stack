@@ -401,7 +401,7 @@ Llevar todos los repositories y provider adapters al estado donde cada llamada e
 
 ## SERVICES-009 — Use case, handler & webhook route compliance
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

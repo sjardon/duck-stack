@@ -4,6 +4,7 @@ import { db } from '../../../shared/infrastructure/db.js';
 import { UserDBRepository } from '../repositories/userDBRepository.js';
 import { UpdateUserProfileUseCase } from '../useCases/updateUserProfileUseCase.js';
 import { UpdateProfileBody } from '../dtos/updateProfileDto.js';
+import { ValidationError } from '../../../shared/errors.js';
 
 export async function updateUserProfileHandler(
   request: FastifyRequest,
@@ -14,7 +15,7 @@ export async function updateUserProfileHandler(
     body = UpdateProfileBody.parse(request.body);
   } catch (err) {
     if (err instanceof ZodError) {
-      return reply.status(400).send({ code: 'VALIDATION_ERROR', message: err.issues[0]?.message ?? 'Invalid request body' });
+      throw new ValidationError(err.issues[0]?.message ?? 'Invalid request body', err);
     }
     throw err;
   }

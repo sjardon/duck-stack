@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { UserProfile } from '@repo/types';
+import { ValidationError } from '../../../src/shared/errors.js';
 import { completeOnboardingHandler } from '../../../src/modules/users/handlers/completeOnboardingHandler.js';
 
 // Mock db and UserDBRepository to prevent real DB connections
@@ -44,19 +45,15 @@ function makeRequest(body: unknown, userId = 'clerk_abc'): FastifyRequest {
 }
 
 describe('completeOnboardingHandler', () => {
-  it('(EC002) returns 400 VALIDATION_ERROR when a field is missing', async () => {
+  it('(R001, R003) throws ValidationError when a field is missing', async () => {
     const request = makeRequest({ job_role: 'Engineer', company_size: '11-50' });
     const reply = makeReply();
 
-    await completeOnboardingHandler(request, reply);
-
-    expect(reply.status).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
-    );
+    await expect(completeOnboardingHandler(request, reply)).rejects.toBeInstanceOf(ValidationError);
+    expect(reply.status).not.toHaveBeenCalled();
   });
 
-  it('(EC003) returns 400 VALIDATION_ERROR when a field is an empty string', async () => {
+  it('(R001, R003) throws ValidationError when a field is an empty string', async () => {
     const request = makeRequest({
       job_role: '',
       company_size: '11-50',
@@ -64,15 +61,11 @@ describe('completeOnboardingHandler', () => {
     });
     const reply = makeReply();
 
-    await completeOnboardingHandler(request, reply);
-
-    expect(reply.status).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
-    );
+    await expect(completeOnboardingHandler(request, reply)).rejects.toBeInstanceOf(ValidationError);
+    expect(reply.status).not.toHaveBeenCalled();
   });
 
-  it('(EC003) returns 400 VALIDATION_ERROR when a field is a non-string value', async () => {
+  it('(R001, R003) throws ValidationError when a field is a non-string value', async () => {
     const request = makeRequest({
       job_role: 123,
       company_size: '11-50',
@@ -80,12 +73,23 @@ describe('completeOnboardingHandler', () => {
     });
     const reply = makeReply();
 
-    await completeOnboardingHandler(request, reply);
+    await expect(completeOnboardingHandler(request, reply)).rejects.toBeInstanceOf(ValidationError);
+    expect(reply.status).not.toHaveBeenCalled();
+  });
 
-    expect(reply.status).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
-    );
+  it('(R014) thrown ValidationError has code VALIDATION_ERROR', async () => {
+    const request = makeRequest({ job_role: 'Engineer', company_size: '11-50' });
+    const reply = makeReply();
+
+    let thrown: unknown;
+    try {
+      await completeOnboardingHandler(request, reply);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ValidationError);
+    expect((thrown as ValidationError).code).toBe('VALIDATION_ERROR');
   });
 
   it('(NF001) valid body reaches use case and returns 200 with profile', async () => {

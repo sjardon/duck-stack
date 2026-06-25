@@ -1,7 +1,32 @@
 import Fastify from 'fastify';
 
+// Mock logger before any imports — must be first so the factory is registered before module load
+jest.mock('../../../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 // Mock db before importing routes
 jest.mock('../../../../../src/shared/infrastructure/db.js', () => ({ db: {} }));
+
+// Mock mobbexConfig so tests control the webhook secret without env-driven reloads
+// Default secret is 'correct-secret'; individual tests override via the mock if needed
+let mockWebhookSecret: string | undefined = 'correct-secret';
+jest.mock('../../../../../src/shared/configs/mobbexConfig.js', () => ({
+  get mobbexConfig() {
+    return {
+      billingProvider: 'mobbex',
+      apiKey: 'test-api-key',
+      accessToken: 'test-access-token',
+      testMode: false,
+      timeoutMs: 5000,
+      webhookSecret: mockWebhookSecret,
+    };
+  },
+}));
 
 // Mock MobbexBillingSyncRepository
 jest.mock('../../../../../src/modules/webhooks/repositories/mobbexBillingSyncRepository.js', () => ({
@@ -17,21 +42,16 @@ jest.mock('../../../../../src/modules/webhooks/mobbex/mobbexEventHandlers.js', (
   dispatchMobbexEvent: (...args: unknown[]) => mockDispatch(...args),
 }));
 
-async function buildApp(secret: string | undefined) {
-  // Set env before importing config
-  if (secret !== undefined) {
-    process.env.MOBBEX_WEBHOOK_SECRET = secret;
-  } else {
-    delete process.env.MOBBEX_WEBHOOK_SECRET;
-  }
+import { logger } from '../../../../../src/shared/infrastructure/logger.js';
+import mobbexWebhookRoutes from '../../../../../src/modules/webhooks/mobbex/routes.js';
 
-  // Re-require config module so env change takes effect
-  jest.resetModules();
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
-  const { default: mobbexWebhookRoutes } = await import(
-    '../../../../../src/modules/webhooks/mobbex/routes.js'
-  );
-
+async function buildApp() {
   const fastify = Fastify({ logger: false });
   await fastify.register(mobbexWebhookRoutes);
   return fastify;
@@ -40,6 +60,7 @@ async function buildApp(secret: string | undefined) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockDispatch.mockResolvedValue('approved');
+  mockWebhookSecret = 'correct-secret';
 });
 
 afterEach(() => {
@@ -50,13 +71,14 @@ afterEach(() => {
 
 describe('mobbexWebhookRoutes — registration and secret verification', () => {
   it('WHEN MOBBEX_WEBHOOK_SECRET is absent THEN plugin registration throws Error', async () => {
-    await expect(buildApp(undefined)).rejects.toThrow(
+    mockWebhookSecret = undefined;
+    await expect(buildApp()).rejects.toThrow(
       /MOBBEX_WEBHOOK_SECRET/,
     );
   });
 
   it('WHEN request arrives with wrong secret THEN responds HTTP 401 with code UNAUTHORIZED', async () => {
-    const app = await buildApp('correct-secret');
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -71,7 +93,7 @@ describe('mobbexWebhookRoutes — registration and secret verification', () => {
   });
 
   it('WHEN request arrives with missing secret THEN responds HTTP 401 with code UNAUTHORIZED', async () => {
-    const app = await buildApp('correct-secret');
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -86,7 +108,7 @@ describe('mobbexWebhookRoutes — registration and secret verification', () => {
   });
 
   it('WHEN secret is correct THEN proceeds past verification', async () => {
-    const app = await buildApp('correct-secret');
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -103,11 +125,11 @@ describe('mobbexWebhookRoutes — registration and secret verification', () => {
 
 describe('mobbexWebhookRoutes — payload parsing', () => {
   it('WHEN request body is not valid JSON THEN responds HTTP 400 with code VALIDATION_ERROR', async () => {
-    const app = await buildApp('test-secret');
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
-      url: '/webhooks/billing/mobbex?secret=test-secret',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
       payload: Buffer.from('not-valid-json'),
       headers: { 'content-type': 'application/json' },
     });
@@ -118,12 +140,12 @@ describe('mobbexWebhookRoutes — payload parsing', () => {
   });
 
   it('WHEN body is valid JSON THEN dispatchMobbexEvent is called with parsed object', async () => {
-    const app = await buildApp('test-secret');
+    const app = await buildApp();
     const eventPayload = { type: 'payment.success', data: { id: 'ptx-001' } };
 
     await app.inject({
       method: 'POST',
-      url: '/webhooks/billing/mobbex?secret=test-secret',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
       payload: Buffer.from(JSON.stringify(eventPayload)),
       headers: { 'content-type': 'application/json' },
     });
@@ -135,16 +157,36 @@ describe('mobbexWebhookRoutes — payload parsing', () => {
   });
 });
 
+// T018 — R006, EC006: logger.warn on JSON parse failure
+
+describe('mobbexWebhookRoutes — logger.warn on JSON parse failure (R006, EC006)', () => {
+  it('WHEN request body is not valid JSON THEN logger.warn is called with parse error before ValidationError is thrown', async () => {
+    const app = await buildApp();
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
+      payload: Buffer.from('not-valid-json'),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [payload, message] = mockLogger.warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(payload.err).toBeDefined();
+    expect(message).toContain('failed to parse request body as JSON');
+  });
+});
+
 // T015 — success response and logging
 
 describe('mobbexWebhookRoutes — success response', () => {
   it('WHEN a verified valid event is processed THEN responds HTTP 200 with { received: true }', async () => {
-    const app = await buildApp('test-secret');
+    const app = await buildApp();
     const eventPayload = { type: 'payment.success', data: { id: 'ptx-001' } };
 
     const response = await app.inject({
       method: 'POST',
-      url: '/webhooks/billing/mobbex?secret=test-secret',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
       payload: Buffer.from(JSON.stringify(eventPayload)),
       headers: { 'content-type': 'application/json' },
     });
@@ -167,7 +209,7 @@ describe('mobbexWebhookRoutes — registration in app.ts', () => {
     process.env.MOBBEX_ACCESS_TOKEN = 'token';
 
     // We just check that buildApp with a valid secret registers the route
-    const app = await buildApp('test-secret');
+    const app = await buildApp();
     const routes = app.printRoutes();
     expect(routes).toContain('webhooks/billing/mobbex');
   });
