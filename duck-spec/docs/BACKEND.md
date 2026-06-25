@@ -66,7 +66,7 @@ Every request gets a UUID via `genReqId`. `LOG_LEVEL` env var controls level (de
 
 ## Domain error model
 
-All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, message: string, statusCode: number)`. Built-in typed errors:
+All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, message: string, statusCode: number, originalError?: unknown)`. The optional `originalError` is for internal logging only and is never serialized in HTTP responses. Built-in typed errors:
 
 | Error class | Status | Code |
 |-------------|--------|------|
@@ -78,7 +78,50 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
-`shared/plugins/errorHandler.ts` intercepts `DomainError` and replies `{ code, message }` at the error's `statusCode`. Unknown errors fall through to Fastify's default handler.
+`shared/plugins/errorHandler.ts` intercepts every error: `DomainError` instances are serialized as `{ code, message }` at the error's `statusCode`; any other error is replied as a fixed `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` at status 500, with the real detail logged but never sent to the client. See the next section for the full propagation and logging contract.
+
+## Error handling rules
+
+### `try/catch` by layer
+
+| Layer | Policy |
+|-------|--------|
+| Routes / handlers | None. Errors bubble to `errorHandler.ts`. |
+| Use cases | Optional. The catch must end in one of the three outcomes below. |
+| Repositories, adapters, provider clients | Required on every external call. Log the original error and re-throw a `DomainError` (typically `ProviderError`) with the cause on `originalError`. |
+| Fire-and-forget async work | Forbidden without a wrapper that catches and logs. |
+
+### Use case catch outcomes
+
+1. **Log + re-throw** — default.
+2. **Log + transform** — wrap in a different `DomainError` when it better describes the situation for the caller. Set `originalError`.
+3. **Log + handle** — fallback, alternative source, or sentinel value. Only when the failure is non-critical (see Silent-fail below).
+
+### Logging
+
+- Log at every `catch`. Prefer duplicate logs over missing ones.
+- `warn` for `DomainError` 4xx; `error` (with stack) for `DomainError` ≥ 500 and any non-`DomainError`.
+- `errorHandler.ts` is the final log site — it logs every error before replying.
+
+### `errorHandler` response contract
+
+| Caught error | Body | Status |
+|---|---|---|
+| `DomainError` | `{ code, message }` from the instance | error's `statusCode` |
+| Any other | `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` | 500 |
+
+`originalError` is logged but never serialized in the response.
+
+### Silent-fail exception
+
+`return null` (or another sentinel) without re-throwing is permitted only when the failure is non-critical and the caller can proceed sensibly. Examples: cache miss → primary source; embedded analytics snippet → must not break the host page. Each site requires a code comment justifying the silent fail.
+
+### Anti-patterns
+
+- `try/catch` in a handler to call `reply.code(500)` — duplicates `errorHandler`.
+- `catch (e) {}` or `return null` without a justifying comment.
+- `throw new Error('failed')` — loses the stack and type. Wrap in a `DomainError` with `originalError`.
+- Unawaited promises outside a wrapper that catches and logs.
 
 ## Security plugins
 
