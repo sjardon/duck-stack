@@ -5,6 +5,8 @@ import { db } from '../../../shared/infrastructure/db.js';
 import { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
 import { dispatchClerkEvent } from './clerkEventHandlers.js';
 import { authConfig } from '../../../shared/configs/authConfig.js';
+import { ValidationError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 
 export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
   const signingSecret = authConfig.clerkWebhookSigningSecret;
@@ -35,9 +37,9 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
     const svixTimestamp = request.headers['svix-timestamp'];
     const svixSignature = request.headers['svix-signature'];
 
-    // If any required Svix header is missing, reject immediately (EC001)
+    // If any required Svix header is missing, throw ValidationError so errorHandler responds (R004, EC001)
     if (!svixId || !svixTimestamp || !svixSignature) {
-      return reply.status(400).send({ error: 'Missing required Svix headers' });
+      throw new ValidationError('Missing required Svix headers');
     }
 
     let event;
@@ -56,9 +58,10 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
       });
 
       event = await verifyWebhook(syntheticRequest, { signingSecret });
-    } catch {
-      // Invalid signature or missing headers (R007, EC001)
-      return reply.status(400).send({ error: 'Webhook signature verification failed' });
+    } catch (err) {
+      // R005, R008: log at warn before throwing; signature verification failure stays HTTP 400 per EC002 decision
+      logger.warn({ err }, 'Clerk webhook signature verification failed');
+      throw new ValidationError('Webhook signature verification failed', err instanceof Error ? err : undefined);
     }
 
     // Dispatch to the appropriate event handler (R009–R012, EC002)

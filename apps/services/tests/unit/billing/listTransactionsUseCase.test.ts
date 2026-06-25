@@ -1,7 +1,27 @@
+// Mock logger before any imports
+jest.mock('../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { ListTransactionsUseCase } from '../../../src/modules/billing/useCases/listTransactionsUseCase.js';
 import { ValidationError } from '../../../src/shared/errors.js';
+import { logger } from '../../../src/shared/infrastructure/logger.js';
 import type { ITransactionRepository } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 const baseEntity: TransactionEntity = {
   id: 'uuid-001',
@@ -112,5 +132,37 @@ describe('ListTransactionsUseCase — org-scoped filtering (EC005)', () => {
     expect(repo.list).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: 'org-001' }),
     );
+  });
+});
+
+// T014 — R007, R008, EC005: logger.warn in both cursor catch branches
+
+describe('ListTransactionsUseCase — logger.warn in both cursor catch branches (R007, R008, EC005)', () => {
+  it('WHEN cursor decode throws a ValidationError THEN logger.warn is called before re-throw', async () => {
+    const repo = makeRepo({ rows: [], nextCursor: null });
+    const useCase = new ListTransactionsUseCase(repo);
+
+    // A cursor that decodes to a non-object JSON value fails the shape check and throws ValidationError
+    const badCursor = Buffer.from('"not-an-object"').toString('base64');
+
+    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor })).rejects.toBeInstanceOf(ValidationError);
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.warn.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBeDefined();
+  });
+
+  it('WHEN cursor decode throws a non-ValidationError (e.g. JSON.parse failure on invalid JSON) THEN logger.warn is called before throwing ValidationError', async () => {
+    const repo = makeRepo({ rows: [], nextCursor: null });
+    const useCase = new ListTransactionsUseCase(repo);
+
+    // '!!!' is valid base64 but decodes to bytes that are not valid JSON, causing JSON.parse to throw SyntaxError
+    const badCursor = Buffer.from('not-valid-json-at-all{{{').toString('base64');
+
+    await expect(useCase.execute('user-001', null, { limit: 20, cursor: badCursor })).rejects.toBeInstanceOf(ValidationError);
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [payload] = mockLogger.warn.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.err).toBeDefined();
   });
 });

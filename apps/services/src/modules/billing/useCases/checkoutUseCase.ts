@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { resolveProvider } from '../providers/resolveProvider.js';
-import { ProviderError } from '../../../shared/errors.js';
+import { ProviderError, DomainError } from '../../../shared/errors.js';
+import { logger } from '../../../shared/infrastructure/logger.js';
 import type { ITransactionRepository } from '../repositories/interfaces/iTransactionRepository.js';
 import type { CheckoutBodyType } from '../dtos/checkoutDto.js';
 
@@ -64,6 +65,12 @@ export class CheckoutUseCase {
       // R005, EC004: persist failure_reason and re-throw
       if (err instanceof ProviderError) {
         await this.repo.updateFailureReason(transaction.id, err.message);
+      }
+      // R007, R008, R009: log at warn for 4xx DomainErrors, error for 5xx or non-DomainError
+      if (err instanceof DomainError && err.statusCode < 500) {
+        logger.warn({ err }, 'CheckoutUseCase: provider checkout failed');
+      } else {
+        logger.error({ err }, 'CheckoutUseCase: provider checkout failed');
       }
       throw err;
     }

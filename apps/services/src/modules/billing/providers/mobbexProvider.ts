@@ -193,8 +193,10 @@ export class MobbexProvider implements PaymentProvider {
       const body = (await response.json()) as { error?: string };
       errorCode = body.error;
     } catch (parseErr: unknown) {
-      // JSON parse failed — body is discarded. This is intentional: a malformed error body
-      // from the provider should not prevent the correct HTTP status from being mapped.
+      // Non-critical silent fail: a malformed error body from the provider should not prevent
+      // the correct HTTP status from being mapped to a ProviderError. We log at warn to preserve
+      // trace completeness and continue with the HTTP status fallback. Only the parse error and
+      // HTTP status code are logged — no token, secret, or user PII is included. (R012, R013, NF004)
       logger.warn(
         { err: parseErr, status: response.status },
         'MobbexProvider.handleErrorResponse: failed to parse error body; using HTTP status fallback',
