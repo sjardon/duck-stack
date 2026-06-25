@@ -292,3 +292,167 @@ Que la estructura de directorios bajo `tests/unit/` espeje exactamente la estruc
 ### Dependencias
 
 - SERVICES-001 — los módulos y la infraestructura de tests deben existir
+
+---
+
+## SERVICES-007 — Error model foundation: originalError + errorHandler logging & contract
+
+**Estado:** DONE
+
+### Contexto
+
+`duck-spec/docs/BACKEND.md` documenta dos contratos del modelo de error que hoy no se cumplen en `apps/services/`:
+
+1. La firma de `DomainError` debe ser `(code, message, statusCode, originalError?)` para que adaptadores y use cases puedan adjuntar la causa interna sin que ésta llegue al cliente. La implementación actual en `src/shared/errors.ts` no acepta `originalError`.
+2. `errorHandler.ts` debe ser el sitio final de log de todo error y debe serializar los errores no-`DomainError` como `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` con status 500. La implementación actual (`src/shared/plugins/errorHandler.ts`) no loguea nada y, para no-`DomainError`, hace `reply.send(error)` — lo que devuelve a Fastify el error crudo y termina filtrando el mensaje real al cliente.
+
+Sin este fundamento, los layers downstream (repositories, use cases, handlers) no pueden cumplir las reglas de error handling porque no existe el mecanismo `originalError` ni el sitio único de log.
+
+### Objetivo
+
+Llevar el modelo de error al estado documentado en BACKEND.md: `DomainError` acepta `originalError`, y `errorHandler` loguea cada error antes de responder con el contrato `{ code, message }` correspondiente.
+
+### Requerimientos funcionales
+
+- Toda subclase de `DomainError` puede ser construida adjuntando una causa interna opcional sin afectar las firmas existentes
+- Cuando una respuesta de error sale del servidor, el error ya fue logueado con su causa interna en el sitio único de log
+- Los errores 4xx de dominio se loguean con nivel `warn`; los errores ≥500 de dominio y cualquier error no-dominio se loguean con nivel `error` incluyendo stack trace
+- Los errores no-dominio se responden al cliente con el cuerpo fijo `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` y status 500, sin filtrar mensaje, stack ni datos internos
+- Los errores de dominio se responden con `{ code, message }` tomados de la instancia y el status de la instancia
+- La causa interna asociada a un error nunca aparece en la respuesta HTTP
+
+### Fuera de scope
+
+- Cambios en repositories, providers, use cases, handlers, webhook routes o plugins (esos ajustes corresponden a SERVICES-008 y SERVICES-009)
+- Reemplazar los `throw new Error(...)` que ocurren en código de bootstrap (DB, plugins, providers)
+- Nuevas subclases de `DomainError`
+- Cambios en el formato de logs más allá del nivel y del payload mínimo requerido por la regla
+
+### Requerimientos no funcionales
+
+- El log de cada error incluye los campos estructurados estándar del logger (`requestId` cuando aplique, `level`, `message`, stack si corresponde)
+- El comportamiento HTTP observable para `DomainError` ya correctamente envueltos no cambia
+- Ningún error no-dominio puede dejar el servidor sin pasar por el sitio de log
+
+### Edge cases
+
+- Error lanzado fuera del scope de un request (p. ej. durante el bootstrap): el contrato del `errorHandler` aplica sólo a errores dentro del ciclo de vida de una request; los de bootstrap quedan fuera
+- Error que ya es `DomainError` y que ya trae `originalError`: se loguea la causa interna pero no se serializa
+- Subclase de `DomainError` instanciada sin pasar `originalError`: se comporta exactamente como hoy
+- Errores tirados por Fastify mismo (p. ej. payload demasiado grande, 404 de ruta): siguen siendo tratados como no-dominio y, por lo tanto, mapeados a `INTERNAL_ERROR/500` salvo que Fastify los emita como instancia con su propio status
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` — secciones "Domain error model" y "Error handling rules"
+
+---
+
+## SERVICES-008 — Repository & adapter try/catch compliance
+
+**Estado:** TODO
+
+### Contexto
+
+BACKEND.md exige que toda llamada externa desde repositories, adapters y provider clients esté envuelta en `try/catch`, loguee la causa original y re-tire un `DomainError` (típicamente `ProviderError`) con la causa en `originalError`. Hoy ninguno de los repositories de `apps/services/src/` cumple esta regla: `userDBRepository`, `subscriptionDBRepository`, `subscriptionPlanDBRepository`, `transactionDBRepository`, `clerkSyncRepository` y `mobbexBillingSyncRepository` ejecutan queries SQL directamente sin envolver. Cualquier fallo de Postgres (timeout, conexión caída, violación de constraint inesperada, error de driver) burbujea como error no-dominio, se loguea —en el mejor caso— recién en el `errorHandler`, y pierde el contexto del repository, del método y de los parámetros que lo dispararon. El `mobbexProvider` tampoco loguea la causa original antes de envolverla en `ProviderError`. Esto rompe la trazabilidad documentada por BACKEND.md.
+
+### Objetivo
+
+Llevar todos los repositories y provider adapters al estado donde cada llamada externa cumple la regla "log + wrap + re-throw" con la causa adjunta como `originalError`.
+
+### Requerimientos funcionales
+
+- Toda query SQL ejecutada por un repository (sea simple, sea dentro de un bloque transaccional `sql.begin`) se ejecuta dentro de un `try/catch`
+- Cuando una query SQL falla, el repository loguea la causa original (incluyendo método, parámetros relevantes no sensibles y stack) y re-tira el error como `DomainError` con la causa en `originalError`
+- Los errores de "row no encontrado" que hoy se traducen a `NotFoundError` por reglas de negocio del propio repository siguen comportándose igual
+- Las transacciones de `mobbexBillingSyncRepository` envuelven cada paso de modo que un fallo en cualquier sub-query cumple la regla de log + wrap + re-throw
+- El adapter `mobbexProvider` loguea la causa original antes de envolverla en `ProviderError` y propaga la causa como `originalError`
+- Frente a un fallo de red, timeout o error del proveedor externo, ningún repository ni adapter deja escapar el error sin que haya pasado por el sitio de log
+
+### Fuera de scope
+
+- Cambios en use cases, handlers o webhook routes (corresponden a SERVICES-009)
+- Cambios en las queries SQL (selects, joins, where, returning, etc.) o en el resultado observable de cada método del repository
+- Nuevas métricas u observabilidad más allá del log requerido por BACKEND.md
+- Reemplazo de `throw new Error(...)` en código de bootstrap
+
+### Requerimientos no funcionales
+
+- El nivel de log para errores ≥500 (incluyendo los de driver de Postgres) es `error` con stack trace
+- El log estructurado de cada catch incluye el nombre del repository y el método (p. ej. `UserDBRepository.findByClerkUserId`) para reconstruir el sitio sin depender del stack
+- Datos sensibles (secretos, tokens, PII) nunca aparecen en el log de la causa original
+- El comportamiento observable para casos felices (resultados, paginación, idempotencia) es idéntico
+
+### Edge cases
+
+- Falla dentro de un `sql.begin(...)` después de que ya se hayan emitido logs intermedios de duración: el catch loguea la causa y la transacción se aborta automáticamente
+- Falla al resolver el `provider_transaction_id` por `reference` en `mobbexBillingSyncRepository`: la causa de la falla de SQL queda logueada antes de que la transacción aborte
+- `mobbexProvider` ya distingue 401/5xx (mapea a 502) de 4xx (mapea a 400): este mapeo se conserva, pero ahora la causa original queda adjunta en `originalError`
+- `mobbexProvider.handleErrorResponse` tiene un `catch {}` al parsear el body de error: queda permitido como silent-fail con comentario justificativo (no es una llamada externa nueva, es defensa contra body no-JSON), pero al menos debe loguearse cuando se descarta
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` — secciones "Error handling rules", "Database client → Query rules" y "Domain error model"
+
+### Dependencias
+
+- SERVICES-007 — usa la firma `(code, message, statusCode, originalError?)` de `DomainError`
+
+---
+
+## SERVICES-009 — Use case, handler & webhook route compliance
+
+**Estado:** TODO
+
+### Contexto
+
+BACKEND.md establece tres reglas para la capa de orquestación que hoy no se cumplen en `apps/services/`:
+
+1. **Handlers no llevan `try/catch`**: los errores deben burbujear al `errorHandler`. Hoy `completeOnboardingHandler` y `updateUserProfileHandler` capturan `ZodError` y hacen `reply.status(400).send(...)` manual, duplicando la lógica del `errorHandler`.
+2. **Webhook routes no replican el `errorHandler`**: `webhooks/clerk/routes.ts` hace `reply.status(400)` manual para headers Svix faltantes y para fallos de verificación de firma, en lugar de tirar `ValidationError`/`UnauthorizedError` que el `errorHandler` traduciría al contrato estándar.
+3. **Cada catch loguea, y todo silent-fail lleva comentario justificativo**: hoy `checkoutUseCase`, `cancelSubscriptionUseCase`, `listTransactionsUseCase`, `clerkAuthPlugin`, `webhooks/mobbex/routes.ts` y `mobbexProvider.handleErrorResponse` capturan errores sin loguear y/o silencian fallos sin un comentario que justifique por qué.
+
+El resultado es: respuestas HTTP inconsistentes (algunos errores devuelven `{ error: ... }` en vez de `{ code, message }`), traza incompleta (catch sin log) y silent-fails no auditables.
+
+### Objetivo
+
+Llevar use cases, handlers, webhook routes y plugins al estado donde toda decisión de error pasa por una de las tres salidas válidas (log + re-throw, log + transform, log + handle con comentario justificativo) y donde el contrato HTTP de error siempre lo emite el `errorHandler`.
+
+### Requerimientos funcionales
+
+- Los handlers de `users` (`completeOnboardingHandler`, `updateUserProfileHandler`) dejan de capturar `ZodError` con `reply.status(400)`; cualquier fallo de validación se traduce en un `ValidationError` lanzado para que lo serialice el `errorHandler`
+- El webhook handler de Clerk deja de hacer `reply.status(400)` manual para headers faltantes y para fallo de verificación; tira el `DomainError` correspondiente y la respuesta sale por el `errorHandler`
+- El webhook handler de Mobbex loguea el detalle del `JSON.parse` fallido antes de tirar `ValidationError`
+- En `checkoutUseCase`, `cancelSubscriptionUseCase` y `listTransactionsUseCase`, cada bloque `catch` loguea (con stack para ≥500, con `warn` para 4xx) antes de re-throw, transform o handle
+- Cada silent-fail explícito que se conserva lleva un comentario en código justificando por qué la falla es no-crítica y por qué el caller puede continuar — alcanza al menos a `cancelSubscriptionUseCase` (provider responde 400 al cancelar suscripción), `clerkAuthPlugin` (JWT inválido → request anónima) y `mobbexProvider.handleErrorResponse` (cuerpo de error no es JSON)
+- El comportamiento HTTP observable se conserva en cada endpoint y webhook: mismos status codes y mismos `code` de error, pero ahora siempre emitidos por el `errorHandler`
+
+### Fuera de scope
+
+- Cambios al modelo de error (corresponden a SERVICES-007)
+- Cambios en repositories o adapters (corresponden a SERVICES-008)
+- Cambios en las DTOs de Zod o en las reglas de validación
+- Reemplazo de `throw new Error(...)` en bootstrap
+- Reescritura de la lógica de dispatch de webhooks
+
+### Requerimientos no funcionales
+
+- Todo `catch` cumple con la regla "log + uno de los tres outcomes"
+- Los silent-fails (`return` o `return null` sin re-throw) están todos cubiertos por un comentario en el archivo que los contiene
+- El log de cada catch incluye el `requestId` cuando ocurre dentro de un request scope, en línea con la estrategia de logging de SERVICES-005
+- El cuerpo de respuesta para todo error 4xx/5xx generado en estos sitios es exactamente el contrato `{ code, message }` o `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }`
+
+### Edge cases
+
+- Webhook de Clerk con header Svix faltante: tira `ValidationError`, el `errorHandler` responde con `{ code: 'VALIDATION_ERROR', ... }` y status 400 — equivalente al payload manual previo (`{ error: ... }` con 400 cambia a `{ code, message }` con 400)
+- Webhook de Clerk con firma inválida: tira `ValidationError` o `UnauthorizedError`; se conserva el status actual (400) salvo que se decida explícitamente migrar a 401 — el ajuste del status debe documentarse en design.md, no asumirse acá
+- `cancelSubscriptionUseCase` recibe `ProviderError` 400 al cancelar: continúa retornando la suscripción ya actualizada localmente (silent-fail), pero ahora con log + comentario justificativo
+- `clerkAuthPlugin` recibe JWT inválido o vencido: sigue dejando `userId`/`orgId` sin setear (silent-fail), pero ahora con log de nivel `warn` además del comentario ya existente
+- Use case que actualmente re-tira sin envolver: queda como "log + re-throw" — no se transforma a otro `DomainError` salvo que mejore la semántica para el caller
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` — sección "Error handling rules" (try/catch by layer, use case catch outcomes, logging, silent-fail exception, anti-patterns)
+
+### Dependencias
+
+- SERVICES-007 — depende del contrato actualizado del `errorHandler` y de la firma con `originalError`

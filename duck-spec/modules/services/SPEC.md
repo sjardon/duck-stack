@@ -47,15 +47,38 @@ A single static `pino()` instance is exported from `shared/infrastructure/logger
 
 ### Domain error model
 
-`shared/errors.ts` defines a `DomainError` base class with `code`, `message`, and `statusCode` fields. Concrete typed errors extend it:
+`shared/errors.ts` defines a `DomainError` base class whose constructor signature is `(code: string, message: string, statusCode: number, originalError?: unknown)`. The optional `originalError` is stored as a public readonly property on the instance for internal logging and is never serialized in HTTP responses. All five concrete typed errors extend `DomainError` and accept the same optional `originalError`:
 
 | Class | Code | HTTP Status |
 |-------|------|-------------|
 | `NotFoundError` | `NOT_FOUND` | 404 |
 | `ValidationError` | `VALIDATION_ERROR` | 400 |
 | `UnauthorizedError` | `UNAUTHORIZED` | 401 |
+| `ForbiddenError` | `FORBIDDEN` | 403 |
+| `ProviderError` | `PROVIDER_ERROR` | 502 or 400 |
 
-The error-handler plugin (`shared/plugins/errorHandler.ts`) uses `fastify.setErrorHandler` to intercept any `DomainError` and reply with `{ code, message }` at the matching HTTP status. All other errors fall through to Fastify's default handler.
+All existing call sites that construct subclasses without a fourth argument continue to work unchanged; `originalError` is optional and defaults to `undefined`.
+
+### Error handler (SERVICES-007)
+
+`shared/plugins/errorHandler.ts` is the single, final logging site for every error intercepted during an HTTP request. The plugin registers a Fastify `setErrorHandler` that delegates to a private `logError` helper before sending any response.
+
+`logError` applies three logging branches:
+
+| Error type | Log level | Payload fields |
+|---|---|---|
+| `DomainError` with `statusCode < 500` | `warn` | `code`, `message`, `statusCode`, `originalError` |
+| `DomainError` with `statusCode >= 500` | `error` | `code`, `message`, `statusCode`, `stack`, `originalError` |
+| Non-`DomainError` | `error` | `message`, `stack`, `originalError` (the error itself) |
+
+After logging, the handler replies as follows:
+
+| Error type | Body | Status |
+|---|---|---|
+| `DomainError` | `{ code, message }` from the instance | error's `statusCode` |
+| Non-`DomainError` | `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` | 500 |
+
+`originalError`, stack traces, and all internal fields are absent from every HTTP response body. Logging uses the static Pino logger from `shared/infrastructure/logger.ts`; the `requestId` is injected automatically by the `mixin` backed by `AsyncLocalStorage` (SERVICES-005) — `errorHandler` performs no manual `requestId` extraction. Bootstrap errors (DB wiring, provider factory initialization) that occur outside a Fastify request lifecycle are not subject to this contract.
 
 ### Security plugins
 
