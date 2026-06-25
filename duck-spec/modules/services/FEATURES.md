@@ -349,7 +349,7 @@ Llevar el modelo de error al estado documentado en BACKEND.md: `DomainError` ace
 
 ## SERVICES-008 — Repository & adapter try/catch compliance
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

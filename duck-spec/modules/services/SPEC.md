@@ -117,6 +117,20 @@ All files under `apps/services/src/` follow lowercase camelCase naming with no d
 
 Response time is well under 100 ms because the handler performs no external calls or I/O operations.
 
+### Repository and adapter try/catch compliance (SERVICES-008)
+
+Every external call in the six database repositories and the `mobbexProvider` adapter is wrapped in a `try/catch` block that satisfies the "log + wrap + re-throw" rule established in `BACKEND.md`.
+
+**Repository catch pattern.** Each repository method body is enclosed in a single method-level `try/catch`. On failure the catch block: (1) re-throws any `DomainError` instance unchanged (preserving `NotFoundError` domain semantics and already-wrapped errors without double-wrapping), (2) emits `logger.error` with the repository class name, method name, and non-sensitive parameters (e.g. `id`, `clerkUserId`, `reference`), and (3) re-throws a `ProviderError` with `statusCode 502` and the original exception attached as `originalError`. The happy-path SQL text, return values, and latency log line inside the `try` block are identical to the pre-compliance code.
+
+**Transactional methods in `mobbexBillingSyncRepository`.** The `updateTransactionStatus` and `upsertRefundAndMaybeMarkTransactionRefunded` methods use a two-level catch structure. Each sub-query inside the `sql.begin(async (tx) => { ... })` callback is individually wrapped: the inner catch logs the failing step and re-throws a `ProviderError`, which causes `postgres.js` to abort the transaction automatically. The outer `try/catch` around `sql.begin` re-throws `DomainError` instances without re-logging (they are already logged at the inner catch site) and handles unexpected errors that originate outside any sub-query body.
+
+**`mobbexProvider` adapter.** The `fetchWithTimeout` method's existing catch block is augmented to emit `logger.error` for network errors and timeouts before re-throwing a `ProviderError` with `originalError` set. The `handleErrorResponse` method's JSON-parse catch emits `logger.warn` when the error body cannot be parsed, carries a code comment justifying the intentional silent-fail fallback, and preserves the existing HTTP status mapping (`statusCode 502` for 401/5xx responses, `statusCode 400` for other 4xx responses).
+
+**Log payload invariants.** Every `logger.error` emitted in a repository or adapter catch includes explicit `repository` and `method` string fields (e.g. `repository: 'UserDBRepository', method: 'findByClerkUserId'`) so the call site is reconstructable without relying on the stack trace. Sensitive data (secrets, tokens, PII) never appears in these payloads. The `requestId` is automatically injected by the `AsyncLocalStorage` mixin (SERVICES-005), including across concurrent in-flight requests.
+
+**Coverage.** The pattern is applied to all six repositories: `UserDBRepository`, `SubscriptionDBRepository`, `SubscriptionPlanDBRepository`, `TransactionDBRepository`, `ClerkSyncRepository`, and `MobbexBillingSyncRepository`. Unit tests for each repository and for `MobbexProvider` assert that SQL or network failures produce a `ProviderError` with `statusCode 502` and `originalError` pointing to the original cause, and that `logger.error` is called with the expected repository and method fields.
+
 ### Container image
 
 `apps/services/Dockerfile` uses a two-stage build:

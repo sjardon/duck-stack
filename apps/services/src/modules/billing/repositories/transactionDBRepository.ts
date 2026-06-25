@@ -6,6 +6,7 @@ import type {
   CreateTransactionData,
   ListTransactionsQuery,
 } from './interfaces/iTransactionRepository.js';
+import { DomainError, ProviderError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 
 export class TransactionDBRepository implements ITransactionRepository {
@@ -13,45 +14,63 @@ export class TransactionDBRepository implements ITransactionRepository {
 
   async create(input: CreateTransactionData): Promise<TransactionEntity> {
     const start = Date.now();
-    const rows = await this.sql<TransactionEntity[]>`
-      INSERT INTO transactions (
-        id, user_id, org_id, provider, amount, currency,
-        description, reference, idempotency_key, metadata, status
-      ) VALUES (
-        ${input.id},
-        ${input.user_id},
-        ${input.org_id},
-        ${input.provider},
-        ${input.amount},
-        ${input.currency},
-        ${input.description},
-        ${input.reference},
-        ${input.idempotency_key ?? null},
-        ${input.metadata ? this.sql.json(input.metadata as Record<string, never>) : null},
-        'pending'
-      )
-      RETURNING id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-                status, description, reference, idempotency_key, metadata, failure_reason,
-                checkout_url, created_at, updated_at
-    `;
-    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.create');
+    try {
+      const rows = await this.sql<TransactionEntity[]>`
+        INSERT INTO transactions (
+          id, user_id, org_id, provider, amount, currency,
+          description, reference, idempotency_key, metadata, status
+        ) VALUES (
+          ${input.id},
+          ${input.user_id},
+          ${input.org_id},
+          ${input.provider},
+          ${input.amount},
+          ${input.currency},
+          ${input.description},
+          ${input.reference},
+          ${input.idempotency_key ?? null},
+          ${input.metadata ? this.sql.json(input.metadata as Record<string, never>) : null},
+          'pending'
+        )
+        RETURNING id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                  status, description, reference, idempotency_key, metadata, failure_reason,
+                  checkout_url, created_at, updated_at
+      `;
+      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.create');
 
-    return rows[0];
+      return rows[0];
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'create' },
+        'TransactionDBRepository.create failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.create', 502, err);
+    }
   }
 
   async findById(id: string): Promise<TransactionEntity | null> {
     const start = Date.now();
-    const rows = await this.sql<TransactionEntity[]>`
-      SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-             status, description, reference, idempotency_key, metadata, failure_reason,
-             checkout_url, created_at, updated_at
-      FROM transactions
-      WHERE id = ${id}
-      LIMIT 1
-    `;
-    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findById');
+    try {
+      const rows = await this.sql<TransactionEntity[]>`
+        SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+               status, description, reference, idempotency_key, metadata, failure_reason,
+               checkout_url, created_at, updated_at
+        FROM transactions
+        WHERE id = ${id}
+        LIMIT 1
+      `;
+      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findById');
 
-    return rows[0] ?? null;
+      return rows[0] ?? null;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'findById' },
+        'TransactionDBRepository.findById failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.findById', 502, err);
+    }
   }
 
   async findByIdempotencyKey(
@@ -59,46 +78,64 @@ export class TransactionDBRepository implements ITransactionRepository {
     userId: string,
     orgId: string | null,
   ): Promise<TransactionEntity | null> {
-    let rows: TransactionEntity[];
+    try {
+      let rows: TransactionEntity[];
 
-    if (orgId !== null) {
-      const start = Date.now();
-      rows = await this.sql<TransactionEntity[]>`
-        SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-               status, description, reference, idempotency_key, metadata, failure_reason,
-               checkout_url, created_at, updated_at
-        FROM transactions
-        WHERE idempotency_key = ${key}
-          AND org_id = ${orgId}
-        LIMIT 1
-      `;
-      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findByIdempotencyKey');
-    } else {
-      const start = Date.now();
-      rows = await this.sql<TransactionEntity[]>`
-        SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-               status, description, reference, idempotency_key, metadata, failure_reason,
-               checkout_url, created_at, updated_at
-        FROM transactions
-        WHERE idempotency_key = ${key}
-          AND user_id = ${userId}
-          AND org_id IS NULL
-        LIMIT 1
-      `;
-      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findByIdempotencyKey');
+      if (orgId !== null) {
+        const start = Date.now();
+        rows = await this.sql<TransactionEntity[]>`
+          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                 status, description, reference, idempotency_key, metadata, failure_reason,
+                 checkout_url, created_at, updated_at
+          FROM transactions
+          WHERE idempotency_key = ${key}
+            AND org_id = ${orgId}
+          LIMIT 1
+        `;
+        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findByIdempotencyKey');
+      } else {
+        const start = Date.now();
+        rows = await this.sql<TransactionEntity[]>`
+          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                 status, description, reference, idempotency_key, metadata, failure_reason,
+                 checkout_url, created_at, updated_at
+          FROM transactions
+          WHERE idempotency_key = ${key}
+            AND user_id = ${userId}
+            AND org_id IS NULL
+          LIMIT 1
+        `;
+        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.findByIdempotencyKey');
+      }
+
+      return rows[0] ?? null;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'findByIdempotencyKey' },
+        'TransactionDBRepository.findByIdempotencyKey failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.findByIdempotencyKey', 502, err);
     }
-
-    return rows[0] ?? null;
   }
 
   async updateFailureReason(id: string, reason: string): Promise<void> {
     const start = Date.now();
-    await this.sql`
-      UPDATE transactions
-      SET failure_reason = ${reason}
-      WHERE id = ${id}
-    `;
-    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.updateFailureReason');
+    try {
+      await this.sql`
+        UPDATE transactions
+        SET failure_reason = ${reason}
+        WHERE id = ${id}
+      `;
+      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.updateFailureReason');
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'updateFailureReason' },
+        'TransactionDBRepository.updateFailureReason failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.updateFailureReason', 502, err);
+    }
   }
 
   async updateProviderData(
@@ -106,13 +143,22 @@ export class TransactionDBRepository implements ITransactionRepository {
     data: { providerTransactionId: string; checkoutUrl: string },
   ): Promise<void> {
     const start = Date.now();
-    await this.sql`
-      UPDATE transactions
-      SET provider_transaction_id = ${data.providerTransactionId},
-          checkout_url = ${data.checkoutUrl}
-      WHERE id = ${id}
-    `;
-    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.updateProviderData');
+    try {
+      await this.sql`
+        UPDATE transactions
+        SET provider_transaction_id = ${data.providerTransactionId},
+            checkout_url = ${data.checkoutUrl}
+        WHERE id = ${id}
+      `;
+      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.updateProviderData');
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'updateProviderData' },
+        'TransactionDBRepository.updateProviderData failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.updateProviderData', 502, err);
+    }
   }
 
   async list(
@@ -131,91 +177,109 @@ export class TransactionDBRepository implements ITransactionRepository {
       cursorId = parsed.id;
     }
 
-    let allRows: TransactionEntity[];
+    try {
+      let allRows: TransactionEntity[];
 
-    if (orgId !== null) {
-      if (cursorCreatedAt && cursorId) {
-        const start = Date.now();
-        allRows = await this.sql<TransactionEntity[]>`
-          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-                 status, description, reference, idempotency_key, metadata, failure_reason,
-                 checkout_url, created_at, updated_at
-          FROM transactions
-          WHERE org_id = ${orgId}
-            AND (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${fetchLimit}
-        `;
-        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+      if (orgId !== null) {
+        if (cursorCreatedAt && cursorId) {
+          const start = Date.now();
+          allRows = await this.sql<TransactionEntity[]>`
+            SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                   status, description, reference, idempotency_key, metadata, failure_reason,
+                   checkout_url, created_at, updated_at
+            FROM transactions
+            WHERE org_id = ${orgId}
+              AND (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${fetchLimit}
+          `;
+          logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+        } else {
+          const start = Date.now();
+          allRows = await this.sql<TransactionEntity[]>`
+            SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                   status, description, reference, idempotency_key, metadata, failure_reason,
+                   checkout_url, created_at, updated_at
+            FROM transactions
+            WHERE org_id = ${orgId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${fetchLimit}
+          `;
+          logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+        }
       } else {
-        const start = Date.now();
-        allRows = await this.sql<TransactionEntity[]>`
-          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-                 status, description, reference, idempotency_key, metadata, failure_reason,
-                 checkout_url, created_at, updated_at
-          FROM transactions
-          WHERE org_id = ${orgId}
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${fetchLimit}
-        `;
-        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+        if (cursorCreatedAt && cursorId) {
+          const start = Date.now();
+          allRows = await this.sql<TransactionEntity[]>`
+            SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                   status, description, reference, idempotency_key, metadata, failure_reason,
+                   checkout_url, created_at, updated_at
+            FROM transactions
+            WHERE user_id = ${userId}
+              AND org_id IS NULL
+              AND (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${fetchLimit}
+          `;
+          logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+        } else {
+          const start = Date.now();
+          allRows = await this.sql<TransactionEntity[]>`
+            SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
+                   status, description, reference, idempotency_key, metadata, failure_reason,
+                   checkout_url, created_at, updated_at
+            FROM transactions
+            WHERE user_id = ${userId}
+              AND org_id IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${fetchLimit}
+          `;
+          logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+        }
       }
-    } else {
-      if (cursorCreatedAt && cursorId) {
-        const start = Date.now();
-        allRows = await this.sql<TransactionEntity[]>`
-          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-                 status, description, reference, idempotency_key, metadata, failure_reason,
-                 checkout_url, created_at, updated_at
-          FROM transactions
-          WHERE user_id = ${userId}
-            AND org_id IS NULL
-            AND (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${fetchLimit}
-        `;
-        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
-      } else {
-        const start = Date.now();
-        allRows = await this.sql<TransactionEntity[]>`
-          SELECT id, user_id, org_id, provider, provider_transaction_id, amount, currency,
-                 status, description, reference, idempotency_key, metadata, failure_reason,
-                 checkout_url, created_at, updated_at
-          FROM transactions
-          WHERE user_id = ${userId}
-            AND org_id IS NULL
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${fetchLimit}
-        `;
-        logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.list');
+
+      let nextCursor: string | null = null;
+
+      if (allRows.length > limit) {
+        const lastRow = allRows[limit];
+        const cursorPayload = JSON.stringify({
+          created_at: lastRow.created_at,
+          id: lastRow.id,
+        });
+        nextCursor = Buffer.from(cursorPayload).toString('base64');
+        allRows = allRows.slice(0, limit);
       }
+
+      return { rows: allRows, nextCursor };
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'list' },
+        'TransactionDBRepository.list failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.list', 502, err);
     }
-
-    let nextCursor: string | null = null;
-
-    if (allRows.length > limit) {
-      const lastRow = allRows[limit];
-      const cursorPayload = JSON.stringify({
-        created_at: lastRow.created_at,
-        id: lastRow.id,
-      });
-      nextCursor = Buffer.from(cursorPayload).toString('base64');
-      allRows = allRows.slice(0, limit);
-    }
-
-    return { rows: allRows, nextCursor };
   }
 
   async getRefundsByTransactionId(transactionId: string): Promise<RefundEntity[]> {
     const start = Date.now();
-    const rows = await this.sql<RefundEntity[]>`
-      SELECT id, transaction_id, amount, reason, status, provider_refund_id, created_at, updated_at
-      FROM refunds
-      WHERE transaction_id = ${transactionId}
-      ORDER BY created_at ASC
-    `;
-    logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.getRefundsByTransactionId');
+    try {
+      const rows = await this.sql<RefundEntity[]>`
+        SELECT id, transaction_id, amount, reason, status, provider_refund_id, created_at, updated_at
+        FROM refunds
+        WHERE transaction_id = ${transactionId}
+        ORDER BY created_at ASC
+      `;
+      logger.info({ duration: Date.now() - start }, 'TransactionDBRepository.getRefundsByTransactionId');
 
-    return rows;
+      return rows;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'TransactionDBRepository', method: 'getRefundsByTransactionId' },
+        'TransactionDBRepository.getRefundsByTransactionId failed',
+      );
+      throw new ProviderError('Database error in TransactionDBRepository.getRefundsByTransactionId', 502, err);
+    }
   }
 }

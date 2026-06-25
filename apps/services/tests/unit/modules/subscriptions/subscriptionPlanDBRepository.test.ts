@@ -1,5 +1,22 @@
+// Mock the static logger so we can spy on its methods
+jest.mock('../../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { SubscriptionPlanDBRepository } from '../../../../src/modules/subscriptions/repositories/subscriptionPlanDBRepository.js';
+import { ProviderError } from '../../../../src/shared/errors.js';
+import { logger } from '../../../../src/shared/infrastructure/logger.js';
 import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 const basePlan: SubscriptionPlanEntity = {
   id: '00000000-0000-0000-0001-000000000001',
@@ -39,6 +56,19 @@ function makeSqlMock(returnValue: unknown = [basePlan]) {
   );
   return { sql, mockFn };
 }
+
+function makeRejectingSqlMock(error: Error) {
+  const mockFn = jest.fn().mockRejectedValue(error);
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ..._values: unknown[]) => mockFn(strings, ..._values),
+    mockFn,
+  );
+  return { sql, mockFn };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+})
 
 describe('SubscriptionPlanDBRepository.listActive — query behavior (R001, R002)', () => {
   it('WHEN listActive is called THEN it issues a SELECT with is_active = true and ORDER BY price ASC', async () => {
@@ -134,5 +164,42 @@ describe('SubscriptionPlanDBRepository.listActive — seed data (R003)', () => {
     expect(codes).toContain('free');
     expect(codes).toContain('pro');
     expect(codes).toContain('business');
+  });
+});
+
+// T005 — SQL error path for listActive
+
+describe('SubscriptionPlanDBRepository.listActive — SQL error path (R001, R002, R007, NF001, NF002, NF003)', () => {
+  it('WHEN listActive sql rejects THEN logger.error is called with repository: \'SubscriptionPlanDBRepository\' and method: \'listActive\'', async () => {
+    const rawError = new Error('connection lost');
+    const { sql } = makeRejectingSqlMock(rawError);
+    const repo = new SubscriptionPlanDBRepository(sql as never);
+
+    await expect(repo.listActive()).rejects.toThrow();
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'SubscriptionPlanDBRepository',
+        method: 'listActive',
+      }),
+      expect.any(String),
+    );
+  });
+
+  it('WHEN listActive sql rejects THEN re-throws ProviderError with statusCode 502 and originalError set', async () => {
+    const rawError = new Error('timeout');
+    const { sql } = makeRejectingSqlMock(rawError);
+    const repo = new SubscriptionPlanDBRepository(sql as never);
+
+    let thrown: unknown;
+    try {
+      await repo.listActive();
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(ProviderError);
+    expect((thrown as ProviderError).statusCode).toBe(502);
+    expect((thrown as ProviderError).originalError).toBe(rawError);
   });
 });

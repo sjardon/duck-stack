@@ -1,7 +1,24 @@
+// Mock the static logger so we can spy on its methods
+jest.mock('../../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { SubscriptionDBRepository } from '../../../../src/modules/subscriptions/repositories/subscriptionDBRepository.js';
+import { ProviderError } from '../../../../src/shared/errors.js';
+import { logger } from '../../../../src/shared/infrastructure/logger.js';
 import type { SubscriptionEntity } from '../../../../src/modules/subscriptions/entities/subscriptionEntity.js';
 import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
 import type { CreateSubscriptionData } from '../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 const baseSubscription: SubscriptionEntity = {
   id: 'sub-001',
@@ -42,6 +59,19 @@ function makeSqlMock(returnValue: unknown = []) {
   );
   return { sql, mockFn };
 }
+
+function makeRejectingSqlMock(error: Error) {
+  const mockFn = jest.fn().mockRejectedValue(error);
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ..._values: unknown[]) => mockFn(strings, ..._values),
+    mockFn,
+  );
+  return { sql, mockFn };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+})
 
 describe('SubscriptionDBRepository.findActiveByScopeStatus — filters non-terminal statuses (R001, R002)', () => {
   it('WHEN called for a user scope THEN returns the non-terminal subscription', async () => {
@@ -165,4 +195,81 @@ describe('SubscriptionDBRepository.findByIdAndScope — scope-checked lookup', (
 
     expect(result).toBeNull();
   });
+});
+
+// T003 — SQL error path tests
+
+describe('SubscriptionDBRepository — SQL error paths (R001, R002, R007, NF001, NF002, NF003)', () => {
+  const methods: Array<{ name: string; call: (repo: SubscriptionDBRepository) => Promise<unknown> }> = [
+    {
+      name: 'findActiveByScopeStatus',
+      call: (repo) => repo.findActiveByScopeStatus('user-001', null),
+    },
+    {
+      name: 'findByIdAndScope',
+      call: (repo) => repo.findByIdAndScope('sub-001', 'user-001', null),
+    },
+    {
+      name: 'findPlanByCode',
+      call: (repo) => repo.findPlanByCode('pro'),
+    },
+    {
+      name: 'create',
+      call: (repo) =>
+        repo.create({
+          id: 'sub-001',
+          user_id: 'user-001',
+          org_id: null,
+          plan_id: 'plan-001',
+          provider: 'mobbex',
+          provider_subscription_id: 'prov-001',
+          status: 'active',
+          current_period_start: null,
+          current_period_end: null,
+        }),
+    },
+    {
+      name: 'setCancelAtPeriodEnd',
+      call: (repo) => repo.setCancelAtPeriodEnd('sub-001'),
+    },
+    {
+      name: 'cancelImmediately',
+      call: (repo) => repo.cancelImmediately('sub-001'),
+    },
+  ];
+
+  for (const { name, call } of methods) {
+    it(`WHEN ${name} sql rejects THEN logger.error is called with repository: 'SubscriptionDBRepository' and method: '${name}'`, async () => {
+      const rawError = new Error(`db error in ${name}`);
+      const { sql } = makeRejectingSqlMock(rawError);
+      const repo = new SubscriptionDBRepository(sql as never);
+
+      await expect(call(repo)).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'SubscriptionDBRepository',
+          method: name,
+        }),
+        expect.any(String),
+      );
+    });
+
+    it(`WHEN ${name} sql rejects THEN re-throws ProviderError with statusCode 502 and originalError`, async () => {
+      const rawError = new Error(`timeout in ${name}`);
+      const { sql } = makeRejectingSqlMock(rawError);
+      const repo = new SubscriptionDBRepository(sql as never);
+
+      let thrown: unknown;
+      try {
+        await call(repo);
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown).toBeInstanceOf(ProviderError);
+      expect((thrown as ProviderError).statusCode).toBe(502);
+      expect((thrown as ProviderError).originalError).toBe(rawError);
+    });
+  }
 });

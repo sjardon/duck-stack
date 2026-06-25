@@ -1,7 +1,24 @@
+// Mock the static logger so we can spy on its methods
+jest.mock('../../../src/shared/infrastructure/logger.js', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
 import { TransactionDBRepository } from '../../../src/modules/billing/repositories/transactionDBRepository.js';
+import { ProviderError } from '../../../src/shared/errors.js';
+import { logger } from '../../../src/shared/infrastructure/logger.js';
 import type { TransactionEntity } from '../../../src/modules/billing/entities/transactionEntity.js';
 import type { RefundEntity } from '../../../src/modules/billing/entities/refundEntity.js';
 import type { CreateTransactionData } from '../../../src/modules/billing/repositories/interfaces/iTransactionRepository.js';
+
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 const baseEntity: TransactionEntity = {
   id: 'uuid-001',
@@ -31,6 +48,20 @@ function makeSqlMock(returnValue: unknown = [baseEntity]) {
   );
   return { sql, mockFn };
 }
+
+function makeRejectingSqlMock(error: Error) {
+  const mockFn = jest.fn().mockRejectedValue(error);
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ..._values: unknown[]) => mockFn(strings, ..._values),
+    mockFn,
+    { json: (val: unknown) => val },
+  );
+  return { sql, mockFn };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+})
 
 describe('TransactionDBRepository.create', () => {
   it('WHEN create is called THEN it executes an INSERT with the correct field values', async () => {
@@ -180,4 +211,69 @@ describe('TransactionDBRepository.list', () => {
     // Verify the sql mock was called (cursor decoding happened without throwing)
     expect(mockFn).toHaveBeenCalledTimes(1);
   });
+});
+
+// T007 — SQL error path tests for all methods
+
+describe('TransactionDBRepository — SQL error paths (R001, R002, R007, NF001, NF002, NF003)', () => {
+  const createInput: CreateTransactionData = {
+    id: 'uuid-001',
+    user_id: 'user-001',
+    org_id: null,
+    provider: 'mobbex',
+    amount: 1000,
+    currency: 'ARS',
+    description: 'Test',
+    reference: 'ref-001',
+    metadata: null,
+  };
+
+  const methods: Array<{ name: string; call: (repo: TransactionDBRepository) => Promise<unknown> }> = [
+    { name: 'create', call: (repo) => repo.create(createInput) },
+    { name: 'findById', call: (repo) => repo.findById('uuid-001') },
+    { name: 'findByIdempotencyKey', call: (repo) => repo.findByIdempotencyKey('key', 'user-001', null) },
+    { name: 'updateFailureReason', call: (repo) => repo.updateFailureReason('uuid-001', 'declined') },
+    {
+      name: 'updateProviderData',
+      call: (repo) =>
+        repo.updateProviderData('uuid-001', { providerTransactionId: 'ptx-001', checkoutUrl: 'https://example.com' }),
+    },
+    { name: 'list', call: (repo) => repo.list({ userId: 'user-001', orgId: null, limit: 20 }) },
+    { name: 'getRefundsByTransactionId', call: (repo) => repo.getRefundsByTransactionId('uuid-001') },
+  ];
+
+  for (const { name, call } of methods) {
+    it(`WHEN ${name} sql rejects THEN logger.error is called with repository: 'TransactionDBRepository' and method: '${name}'`, async () => {
+      const rawError = new Error(`db error in ${name}`);
+      const { sql } = makeRejectingSqlMock(rawError);
+      const repo = new TransactionDBRepository(sql as never);
+
+      await expect(call(repo)).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'TransactionDBRepository',
+          method: name,
+        }),
+        expect.any(String),
+      );
+    });
+
+    it(`WHEN ${name} sql rejects THEN re-throws ProviderError with statusCode 502 and originalError`, async () => {
+      const rawError = new Error(`timeout in ${name}`);
+      const { sql } = makeRejectingSqlMock(rawError);
+      const repo = new TransactionDBRepository(sql as never);
+
+      let thrown: unknown;
+      try {
+        await call(repo);
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown).toBeInstanceOf(ProviderError);
+      expect((thrown as ProviderError).statusCode).toBe(502);
+      expect((thrown as ProviderError).originalError).toBe(rawError);
+    });
+  }
 });
