@@ -45,7 +45,7 @@ export interface WebhookEvent {
 export interface PaymentProvider {
   createCheckout(input: CheckoutInput): Promise<CheckoutSession>;
   queryTransaction(transactionId: string): Promise<TransactionStatus>;
-  createSubscription(planId: string, subscriberRef: string): Promise<{ subscriptionId: string }>;
+  createSubscription(planId: string, subscriberRef: string): Promise<{ subscriptionId: string; checkoutUrl: string }>;
   cancelSubscription(subscriptionId: string): Promise<void>;
   verifyWebhook(
     rawBody: Buffer,
@@ -98,6 +98,37 @@ export interface Refund {
   provider_refund_id: string;
   created_at: string;
   updated_at: string;
+}
+
+export type SubscriptionStatusValue =
+  | 'pending'
+  | 'active'
+  | 'past_due'
+  | 'canceled'
+  | 'expired';
+
+export interface Subscription {
+  id: string;
+  user_id: string | null;
+  org_id: string | null;
+  plan_id: string;
+  provider: string;
+  provider_subscription_id: string | null;
+  status: SubscriptionStatusValue;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  canceled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSubscriptionInput {
+  planCode: string;
+}
+
+export interface CancelSubscriptionInput {
+  atPeriodEnd: boolean;
 }
 
 export interface UserProfile {
