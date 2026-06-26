@@ -1,4 +1,4 @@
-import { PLAN_ENTITLEMENTS } from '../../../../src/modules/subscriptions/entitlements.js';
+import { PLAN_ENTITLEMENTS, PLAN_QUOTAS } from '../../../../src/modules/subscriptions/entitlements.js';
 
 describe('PLAN_ENTITLEMENTS — mapping coverage (R001)', () => {
   it('WHEN PLAN_ENTITLEMENTS is imported THEN it has entries for free, pro, and business', () => {
@@ -31,5 +31,41 @@ describe('PLAN_ENTITLEMENTS — mapping coverage (R001)', () => {
 
   it('WHEN an unknown plan code is looked up THEN it returns undefined', () => {
     expect(PLAN_ENTITLEMENTS['unknown_plan']).toBeUndefined();
+  });
+});
+
+describe('PLAN_QUOTAS — mapping coverage (R001)', () => {
+  it('WHEN PLAN_QUOTAS is imported THEN it has entries for free, pro, and business', () => {
+    expect(PLAN_QUOTAS).toHaveProperty('free');
+    expect(PLAN_QUOTAS).toHaveProperty('pro');
+    expect(PLAN_QUOTAS).toHaveProperty('business');
+  });
+
+  it('WHEN free plan is looked up THEN api_requests has numeric soft_limit and hard_limit', () => {
+    const quotas = PLAN_QUOTAS['free'];
+    expect(quotas).toHaveProperty('api_requests');
+    expect(typeof quotas!['api_requests']!.soft_limit).toBe('number');
+    expect(typeof quotas!['api_requests']!.hard_limit).toBe('number');
+  });
+
+  it('WHEN pro plan is looked up THEN api_requests has numeric soft_limit and hard_limit', () => {
+    const quotas = PLAN_QUOTAS['pro'];
+    expect(quotas).toHaveProperty('api_requests');
+    expect(typeof quotas!['api_requests']!.soft_limit).toBe('number');
+    expect(typeof quotas!['api_requests']!.hard_limit).toBe('number');
+  });
+
+  it('WHEN business plan is looked up THEN api_requests has numeric soft_limit and hard_limit', () => {
+    const quotas = PLAN_QUOTAS['business'];
+    expect(quotas).toHaveProperty('api_requests');
+    expect(typeof quotas!['api_requests']!.soft_limit).toBe('number');
+    expect(typeof quotas!['api_requests']!.hard_limit).toBe('number');
+  });
+
+  it('WHEN each plan is looked up THEN soft_limit < hard_limit for api_requests', () => {
+    for (const planCode of ['free', 'pro', 'business']) {
+      const thresholds = PLAN_QUOTAS[planCode]!['api_requests']!;
+      expect(thresholds.soft_limit).toBeLessThan(thresholds.hard_limit);
+    }
   });
 });

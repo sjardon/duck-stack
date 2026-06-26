@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
-import { DomainError } from '../errors.js';
+import { DomainError, QuotaExceededError } from '../errors.js';
 import { logger } from '../infrastructure/logger.js';
 
 function logError(error: unknown): void {
@@ -42,6 +42,18 @@ function logError(error: unknown): void {
 export default fp(async function errorHandlerPlugin(fastify: FastifyInstance) {
   fastify.setErrorHandler((error, request, reply) => {
     logError(error);
+
+    if (error instanceof QuotaExceededError) {
+      return reply.status(429).send({
+        code: error.code,
+        message: error.message,
+        quota: error.quotaName,
+        count: error.count,
+        soft_limit: error.soft_limit,
+        hard_limit: error.hard_limit,
+        period_end: error.period_end,
+      });
+    }
 
     if (error instanceof DomainError) {
       return reply

@@ -150,6 +150,29 @@ export type EntitlementName =
   | 'team_collaboration'
   | 'white_label';
 
+export type QuotaName = string;
+
+export interface QuotaThresholds {
+  soft_limit: number;
+  hard_limit: number;
+}
+
+export type QuotaState = 'normal' | 'soft_exceeded' | 'hard_exceeded';
+
+export interface QuotaUsage {
+  name: QuotaName;
+  count: number;
+  soft_limit: number;
+  hard_limit: number;
+  period_start: string;
+  period_end: string;
+  state: QuotaState;
+}
+
+export interface QuotasResponse {
+  quotas: QuotaUsage[];
+}
+
 export interface SubscriptionPlan {
   id: string;
   code: string;

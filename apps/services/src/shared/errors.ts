@@ -45,3 +45,15 @@ export class ProviderError extends DomainError {
     super('PROVIDER_ERROR', message, statusCode, originalError);
   }
 }
+
+export class QuotaExceededError extends DomainError {
+  constructor(
+    public readonly quotaName: string,
+    public readonly count: number,
+    public readonly soft_limit: number,
+    public readonly hard_limit: number,
+    public readonly period_end: string,
+  ) {
+    super('QUOTA_EXCEEDED', `Quota exceeded: ${quotaName}`, 429);
+  }
+}
