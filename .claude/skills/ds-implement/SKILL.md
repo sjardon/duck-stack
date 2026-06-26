@@ -35,7 +35,17 @@ Read all three files before writing any code:
 - `duck-spec/modules/<module>/<feature-dir>/design.md` — chosen solution, technical design, files list, requirement coverage
 - `duck-spec/modules/<module>/<feature-dir>/tasks.md` — ordered task list (T-IDs) with covered R-IDs and function-level descriptions
 
-### 2. Implement tasks in order
+### 2. Reading existing code (discipline)
+
+Use the `Files` section of design.md as your map. For each file you must MODIFY, follow this order:
+
+1. **Prefer mapping over reading.** Use `bash .claude/skills/ds-context/scripts/symbols.sh <file>` (see ds-context skill) to see what the file exports. This alone is often enough to know where to make a change.
+2. **Read in a tight window.** When you need a specific symbol's body, use `Grep` to locate it and `Read` with `offset` and `limit` to load only that range.
+3. **Read the whole file only when justified.** Reading top-to-bottom is reserved for files under ~100 lines or for structural changes (refactor of imports, large rewrites).
+
+Files marked CREATE do not need to be read — they do not yet exist.
+
+### 3. Implement tasks in order
 
 Work through every task in tasks.md in listed order. Tasks are grouped by R-ID in test→implement→refactor sequence.
 
@@ -46,7 +56,7 @@ For each task:
 
 **Constraints from analysis.md are hard limits** — do not implement anything that would violate a technical constraint or an out-of-scope item.
 
-### 3. Verify task completion
+### 4. Verify task completion
 
 After implementing all tasks, verify:
 - Every file listed under `Files` in design.md has been created or modified as specified
@@ -73,9 +83,17 @@ After implementing all tasks, verify:
 
 `rId` is populated only for `review`-type findings. For `lint`, `build`, and `test` findings it is `null`.
 
-### 1. Re-read the three artifacts
+### 1. Load only the context required by pendingFixes
 
-Re-read analysis.md, design.md, and tasks.md to restore context.
+Do NOT re-read all three artifacts blindly. Inspect the findings first and load the minimum required:
+
+| Finding type | What to load |
+|---|---|
+| `lint` / `build` / `test` | The cited `file` only (use `Read` with `offset`/`limit` around the cited `line` if the file is large). Do NOT re-read analysis.md, design.md, or tasks.md. |
+| `review` (has `rId`) | Read `analysis.md` and locate the R-ID row in the Functional requirements table. Read `design.md` only if the Requirement-coverage mapping is needed to disambiguate the fix. |
+| Mixed | Load the union of the above — never more. |
+
+Never re-read `tasks.md` on retry — tasks are immutable and have already been executed.
 
 ### 2. Fix only the reported findings
 

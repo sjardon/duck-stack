@@ -40,20 +40,37 @@ Do NOT proceed until the file is read and all IDs are catalogued.
 
 ### 2. Read applicable conventions
 
-Identify which apps the feature will touch (inferable from the `module` field and the typical mapping below) and read the corresponding conventions document(s) in full before evaluating alternatives:
+Identify which apps the feature will touch (inferable from the `module` field and the typical mapping below) and consult the corresponding conventions document(s) before evaluating alternatives:
 
 | App likely affected | Conventions doc |
 |---|---|
 | `apps/services/` (backend modules — `auth`, `billing`, `subscriptions`, `webhooks`, etc.) | `duck-spec/docs/BACKEND.md` |
 | `apps/web/`, `apps/landing/` (frontend modules) | `duck-spec/docs/FRONTEND.md` |
 
+Use the ds-context protocol (preloaded skill) to access these — they are vetted paths and MUST NOT be read in full:
+
+1. Run `bash .claude/skills/ds-context/scripts/toc.sh <doc>` to see the available sections.
+2. For every section that applies to this feature's design, run `bash .claude/skills/ds-context/scripts/section.sh <doc> "<heading>"` and read it fully.
+
 The rules in those documents are **hard constraints with the same weight as the "Technical constraints" section of analysis.md**. The chosen solution, every entry in the Files section, and every task must respect them. Treat layering rules (e.g. "one repository per entity per data source", "use cases never consume other use cases", "no `process.env` outside config files") as design-level decisions, not implementation polish.
 
 If the design would require violating a convention, prefer redesigning over violating it. If a violation is genuinely unavoidable, note it explicitly in the "Chosen solution" justification with the reason.
 
-Do NOT proceed until the applicable conventions doc(s) have been read.
+Do NOT proceed until every applicable section has been consulted via `section.sh`. If `toc.sh` shows a section that is plausibly relevant but you skipped it, document why in the "Chosen solution" justification.
 
-### 3. Evaluate solution alternatives
+### 3. Consult current module state
+
+Before evaluating alternatives, check the existing state of the module the feature belongs to:
+
+```bash
+bash .claude/skills/ds-context/scripts/toc.sh duck-spec/modules/<module>/SPEC.md
+```
+
+Read (via `section.sh`) any section describing capabilities the feature depends on, extends, or modifies. This prevents proposing solutions that conflict with what is already implemented.
+
+Skip this step only when SPEC.md does not exist for the module — record that fact in the design's "Chosen solution" justification if it influenced any decision.
+
+### 4. Evaluate solution alternatives
 
 The number of alternatives to evaluate depends on `effort`:
 
@@ -73,7 +90,7 @@ Select the solution that best satisfies:
 3. Technical constraints from analysis.md
 4. Minimizes scope creep beyond what's in analysis.md
 
-### 4. Produce design.md
+### 5. Produce design.md
 
 Using the template in `design.template.md`, fill in each section:
 
@@ -98,7 +115,7 @@ Using the template in `design.template.md`, fill in each section:
 
 Write the output to: `duck-spec/modules/<module>/<feature-dir>/design.md`
 
-### 5. Produce tasks.md
+### 6. Produce tasks.md
 
 Using the template in `tasks.template.md`, create one task per atomic, function-level unit of work.
 
@@ -126,7 +143,7 @@ Tasks must also be ordered by dependency: if T002 depends on T001, T002 comes af
 
 Write the output to: `duck-spec/modules/<module>/<feature-dir>/tasks.md`
 
-### 6. Verify coverage
+### 7. Verify coverage
 
 Before returning, verify:
 - Every R-ID from analysis.md appears in the `Covers` column of at least one task in tasks.md

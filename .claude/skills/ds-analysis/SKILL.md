@@ -25,13 +25,21 @@ The orchestrator also provides `module` — the module name matching a directory
 
 ### 1. Validate the feature
 
-Read `duck-spec/modules/<module>/FEATURES.md` and locate the entry for `featureId`.
+Retrieve only the FEATURES.md entry for `featureId` using the ds-context protocol (preloaded skill):
+
+```bash
+bash .claude/skills/ds-context/scripts/feature.sh <module> <featureId>
+```
+
+Do NOT use Read on `duck-spec/modules/<module>/FEATURES.md` — it is a vetted path.
 
 If `Estado` is `DONE` or `DEPRECATED`: return `status: "failure"` with a descriptive error. Do NOT proceed.
 
 ### 2. Read referenced documentation
 
-Read every file or link listed in the feature's `Documentación relevante` field before writing anything. This context informs the quality of the requirements.
+Consult every file or link listed in the feature's `Documentación relevante` field before writing anything — this context informs requirement quality.
+
+For any vetted path listed there (see `ds-context` skill), use `toc.sh` first and pull only the sections that apply to the feature via `section.sh`. For files outside the vetted list, read in full with the Read tool.
 
 ### 3. Produce analysis.md
 
