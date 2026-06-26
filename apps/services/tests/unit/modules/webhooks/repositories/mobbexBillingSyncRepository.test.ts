@@ -10,7 +10,10 @@ jest.mock('../../../../../src/shared/infrastructure/logger.js', () => ({
 import { MobbexBillingSyncRepository } from '../../../../../src/modules/webhooks/repositories/mobbexBillingSyncRepository.js';
 import { ProviderError } from '../../../../../src/shared/errors.js';
 import { logger } from '../../../../../src/shared/infrastructure/logger.js';
-import type { UpsertRefundInput } from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
+import type {
+  UpsertRefundInput,
+  UpdateSubscriptionStatusInput,
+} from '../../../../../src/modules/webhooks/repositories/interfaces/iMobbexBillingSyncRepository.js';
 
 const mockLogger = logger as unknown as {
   info: jest.Mock;
@@ -587,5 +590,393 @@ describe('MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunde
     expect(thrown).toBeInstanceOf(ProviderError);
     expect((thrown as ProviderError).statusCode).toBe(502);
     expect((thrown as ProviderError).originalError).toBe(rawError);
+  });
+});
+
+// T003 — checkDuplicateEventId
+
+describe('MobbexBillingSyncRepository.checkDuplicateEventId', () => {
+  it('WHEN the DB returns a row with the given provider+event_id THEN returns true', async () => {
+    const { sql, mockFn } = makeSimpleSqlMock([{ '?column?': 1 }]);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const result = await repo.checkDuplicateEventId('evt-001', 'mobbex');
+
+    expect(result).toBe(true);
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('WHEN no matching row exists THEN returns false', async () => {
+    const { sql, mockFn } = makeSimpleSqlMock([]);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    const result = await repo.checkDuplicateEventId('evt-nonexistent', 'mobbex');
+
+    expect(result).toBe(false);
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// T005 — recordEvent extended with subscriptionId and eventId
+
+describe('MobbexBillingSyncRepository.recordEvent — subscriptionId and eventId fields (R008)', () => {
+  it('WHEN recordEvent is called with subscriptionId and eventId THEN insert receives subscription_id and event_id', async () => {
+    const { sql, mockFn } = makeSimpleSqlMock([]);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    await repo.recordEvent({
+      eventType: 'subscription.activated',
+      payload: { type: 'subscription.activated' },
+      transactionId: null,
+      subscriptionId: 'sub-001',
+      eventId: 'evt-001',
+    });
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    const call = mockFn.mock.calls[0] as unknown[];
+    expect(call[4]).toBe('sub-001');
+    expect(call[5]).toBe('evt-001');
+  });
+
+  it('WHEN recordEvent is called without subscriptionId or eventId THEN both columns default to null', async () => {
+    const { sql, mockFn } = makeSimpleSqlMock([]);
+    const repo = new MobbexBillingSyncRepository(sql as never);
+
+    await repo.recordEvent({
+      eventType: 'subscription.activated',
+      payload: { type: 'subscription.activated' },
+      transactionId: null,
+    });
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    const call = mockFn.mock.calls[0] as unknown[];
+    expect(call[4]).toBeNull();
+    expect(call[5]).toBeNull();
+  });
+});
+
+// T007 — updateSubscriptionStatus: activated event
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — activated event (R002, R009)', () => {
+  it('WHEN eventType is subscription.activated and subscription is pending THEN updates status to active and returns applied', async () => {
+    const pendingSub = { id: 'sub-001', status: 'pending', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([pendingSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const input: UpdateSubscriptionStatusInput = {
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.activated',
+      currentPeriodStart: '2026-06-01T00:00:00Z',
+      currentPeriodEnd: '2026-07-01T00:00:00Z',
+    };
+
+    const result = await repo.updateSubscriptionStatus(input);
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.subscriptionId).toBe('sub-001');
+    expect(result.resolvedStatus).toBe('pending');
+  });
+
+  it('WHEN eventType is subscription.activated and subscription is already active with matching periods THEN returns noop without UPDATE (R009)', async () => {
+    const activeSub = {
+      id: 'sub-001',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00Z',
+      current_period_end: '2026-07-01T00:00:00Z',
+    };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([activeSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const input: UpdateSubscriptionStatusInput = {
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.activated',
+      currentPeriodStart: '2026-06-01T00:00:00Z',
+      currentPeriodEnd: '2026-07-01T00:00:00Z',
+    };
+
+    const result = await repo.updateSubscriptionStatus(input);
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+    expect(result.subscriptionId).toBe('sub-001');
+  });
+});
+
+// T008 — updateSubscriptionStatus: renewed event
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — renewed event (R003, R004, EC001, R009)', () => {
+  it('WHEN eventType is subscription.renewed and subscription is active with matching current_period_end THEN returns noop (R009)', async () => {
+    const activeSub = {
+      id: 'sub-001',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00Z',
+      current_period_end: '2026-07-01T00:00:00Z',
+    };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([activeSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.renewed',
+      currentPeriodEnd: '2026-07-01T00:00:00Z',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+
+  it('WHEN eventType is subscription.renewed and subscription is past_due THEN updates status to active and current_period_end (R004)', async () => {
+    const pastDueSub = {
+      id: 'sub-001',
+      status: 'past_due',
+      current_period_start: '2026-06-01T00:00:00Z',
+      current_period_end: '2026-07-01T00:00:00Z',
+    };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([pastDueSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.renewed',
+      currentPeriodEnd: '2026-08-01T00:00:00Z',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('past_due');
+  });
+
+  it('WHEN eventType is subscription.renewed and subscription is pending THEN updates status to active with period_start and period_end (EC001)', async () => {
+    const pendingSub = {
+      id: 'sub-001',
+      status: 'pending',
+      current_period_start: null,
+      current_period_end: null,
+    };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([pendingSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.renewed',
+      currentPeriodStart: '2026-06-01T00:00:00Z',
+      currentPeriodEnd: '2026-07-01T00:00:00Z',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('pending');
+  });
+
+  it('WHEN eventType is subscription.renewed and subscription is active with different current_period_end THEN updates only current_period_end (R003)', async () => {
+    const activeSub = {
+      id: 'sub-001',
+      status: 'active',
+      current_period_start: '2026-06-01T00:00:00Z',
+      current_period_end: '2026-07-01T00:00:00Z',
+    };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([activeSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.renewed',
+      currentPeriodEnd: '2026-08-01T00:00:00Z',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('active');
+  });
+});
+
+// T009 — updateSubscriptionStatus: payment_failed event
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — payment_failed event (R005, EC002, R009)', () => {
+  it('WHEN eventType is subscription.payment_failed and subscription is active THEN updates status to past_due (R005)', async () => {
+    const activeSub = { id: 'sub-001', status: 'active', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([activeSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.payment_failed',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('active');
+  });
+
+  it('WHEN eventType is subscription.payment_failed and subscription is already past_due THEN returns noop without UPDATE (R009)', async () => {
+    const pastDueSub = { id: 'sub-001', status: 'past_due', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([pastDueSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.payment_failed',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+
+  it('WHEN eventType is subscription.payment_failed and subscription is canceled THEN returns noop without UPDATE (EC002)', async () => {
+    const canceledSub = { id: 'sub-001', status: 'canceled', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([canceledSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.payment_failed',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+
+  it('WHEN eventType is subscription.payment_failed and subscription is expired THEN returns noop without UPDATE (EC002)', async () => {
+    const expiredSub = { id: 'sub-001', status: 'expired', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([expiredSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.payment_failed',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+});
+
+// T010 — updateSubscriptionStatus: canceled event
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — canceled event (R006, R009)', () => {
+  it('WHEN eventType is subscription.canceled and subscription is active THEN updates status to canceled and sets canceled_at (R006)', async () => {
+    const activeSub = { id: 'sub-001', status: 'active', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([activeSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.canceled',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('active');
+  });
+
+  it('WHEN eventType is subscription.canceled and subscription is already canceled THEN returns noop without UPDATE (R009)', async () => {
+    const canceledSub = { id: 'sub-001', status: 'canceled', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([canceledSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.canceled',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+});
+
+// T011 — updateSubscriptionStatus: expired event
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — expired event (R007, R009)', () => {
+  it('WHEN eventType is subscription.expired and subscription is active THEN updates status to expired (R007)', async () => {
+    const activeSub = { id: 'sub-001', status: 'active', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn
+      .mockResolvedValueOnce([activeSub])
+      .mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.expired',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(2);
+    expect(result.outcome).toBe('applied');
+    expect(result.resolvedStatus).toBe('active');
+  });
+
+  it('WHEN eventType is subscription.expired and subscription is already expired THEN returns noop without UPDATE (R009)', async () => {
+    const expiredSub = { id: 'sub-001', status: 'expired', current_period_start: null, current_period_end: null };
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([expiredSub]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-1',
+      eventType: 'subscription.expired',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('noop');
+  });
+});
+
+// T012 — updateSubscriptionStatus: orphan when subscription not found
+
+describe('MobbexBillingSyncRepository.updateSubscriptionStatus — orphan (EC003)', () => {
+  it('WHEN the SELECT returns no rows THEN returns orphan with null subscriptionId and resolvedStatus', async () => {
+    const { sql, innerMockFn } = makeSqlBegin([]);
+
+    innerMockFn.mockResolvedValueOnce([]);
+
+    const repo = new MobbexBillingSyncRepository(sql as never);
+    const result = await repo.updateSubscriptionStatus({
+      providerSubscriptionId: 'psub-nonexistent',
+      eventType: 'subscription.activated',
+    });
+
+    expect(innerMockFn).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe('orphan');
+    expect(result.subscriptionId).toBeNull();
+    expect(result.resolvedStatus).toBeNull();
   });
 });

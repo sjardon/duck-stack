@@ -47,7 +47,7 @@ describe('PaymentProvider port (R001)', () => {
           status: 'pending',
           total: { amount: 0, currency: 'ARS' },
         }),
-      createSubscription: () => Promise.resolve({ subscriptionId: '' }),
+      createSubscription: () => Promise.resolve({ subscriptionId: '', checkoutUrl: '' }),
       cancelSubscription: () => Promise.resolve(),
       verifyWebhook: () => Promise.resolve({ type: '', data: {} }),
     };

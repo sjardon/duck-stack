@@ -7,6 +7,8 @@ function makeRepo(updateOutcome: 'approved' | 'failed' | 'noop' | 'unresolved' =
     updateTransactionStatus: jest.fn().mockResolvedValue({ outcome: updateOutcome, transactionId }),
     recordEvent: jest.fn().mockResolvedValue(undefined),
     upsertRefundAndMaybeMarkTransactionRefunded: jest.fn().mockResolvedValue({ outcome: 'refund_approved', transactionId: 'uuid-tx-001' }),
+    checkDuplicateEventId: jest.fn().mockResolvedValue(false),
+    updateSubscriptionStatus: jest.fn().mockResolvedValue({ outcome: 'applied', subscriptionId: null, resolvedStatus: null }),
   };
 }
 
@@ -16,6 +18,8 @@ function makeRefundRepo(refundOutcome: 'refund_approved' | 'refund_failed' | 'tr
     updateTransactionStatus: jest.fn().mockResolvedValue({ outcome: 'noop', transactionId: null }),
     recordEvent: jest.fn().mockResolvedValue(undefined),
     upsertRefundAndMaybeMarkTransactionRefunded: jest.fn().mockResolvedValue({ outcome: refundOutcome, transactionId }),
+    checkDuplicateEventId: jest.fn().mockResolvedValue(false),
+    updateSubscriptionStatus: jest.fn().mockResolvedValue({ outcome: 'applied', subscriptionId: null, resolvedStatus: null }),
   };
 }
 
