@@ -139,6 +139,18 @@ Section components in `components/sections/` must remain independent of each oth
 
 `apps/landing` deliberately omits React Query, Zustand, and `@repo/types`. These are intentional exclusions that match the lightweight nature of a marketing SPA and must not be introduced without a new feature explicitly scoping that addition.
 
+## Entitlement gating
+
+`apps/web` provides two primitives for feature gating based on the authenticated scope's subscription entitlements.
+
+### `useEntitlement(name: EntitlementName): boolean`
+
+Defined in `apps/web/src/hooks/use-entitlement.ts`. Fetches `GET /billing/entitlements/me` via React Query with query key `['billing', 'entitlements', 'me']` and a `staleTime` of 5 minutes. All components that call `useEntitlement` share this single cache entry — no additional network requests are made regardless of how many components on the page consume it. A 401 response is caught inside the query function and returns an empty array without propagating an error, making the hook safe to call before auth settles. Returns `true` if the response array includes `name`, `false` otherwise.
+
+### `<EntitlementGate name="..." fallback={...}>`
+
+Defined in `apps/web/src/components/domain/billing/EntitlementGate.tsx`. Renders `children` when `useEntitlement(name)` is `true`; renders `fallback` (defaulting to an inline upgrade CTA) when `false`. Consumers supply a typed `EntitlementName` (from `@repo/types`) as the `name` prop. The component does not manage loading state — during the initial query window it treats the entitlement as absent, so the upgrade CTA is shown briefly until the response arrives. If this flicker is unacceptable for a given use case, consumers should guard with a loading check before rendering `<EntitlementGate>`.
+
 ## Shared domain types
 
 Frontend apps import shared TypeScript interfaces from `@repo/types` via the pnpm workspace link. `components/ui/` components must not import from `@repo/types` — domain awareness is reserved for `components/domain/` and above.

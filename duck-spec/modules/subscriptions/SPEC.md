@@ -35,3 +35,28 @@ Three protected endpoints handle the subscribe/cancel lifecycle, all guarded by 
 Provider access goes exclusively through `resolveProvider()` from the billing module. The subscriptions module never imports a provider adapter directly. State convergence (renewals, payment failures, status updates from the provider) is not handled in this feature and is delegated to SUBS-003 webhooks.
 
 The types `SubscriptionStatusValue`, `Subscription`, `CreateSubscriptionInput`, and `CancelSubscriptionInput` are exported from `@repo/types` and shared by the backend module and frontend consumers.
+
+---
+
+## Entitlements / Feature Gates (SUBS-005)
+
+The module defines a code-level mapping from `plan.code` to an array of `EntitlementName` values in `apps/services/src/modules/subscriptions/entitlements.ts`. The three seed plans map as follows: `free` has no entitlements; `pro` grants `advanced_analytics`, `priority_support`, and `api_access`; `business` additionally grants `team_collaboration` and `white_label`. This mapping is the backend's single source of truth — no entitlement resolution occurs from the database.
+
+Entitlement resolution rules applied by `GetEntitlementsUseCase`:
+
+| Subscription state | Resolved entitlements |
+|---|---|
+| No subscription (or all rows `canceled`/`expired` past period) | `free` plan mapping |
+| `past_due` with `STRICT_ENTITLEMENTS_ON_PAST_DUE=true` | `free` plan mapping |
+| `canceled` with `current_period_end > now()` | Subscription's plan mapping |
+| `active`, `pending`, `past_due` (non-strict) | Subscription's plan mapping |
+
+The repository method `findActiveOrWithinPeriodByScope` returns a single `SubscriptionWithPlanEntity` (extending `SubscriptionEntity` with `plan_code`) via a JOIN query against `subscription_plans`. Active/pending/past_due rows are prioritized over canceled-within-period rows via an `ORDER BY CASE` expression, so no wall-clock tie-breaking is needed in the use case.
+
+`GET /billing/entitlements/me` (protected by `requireAuth`) returns `{ entitlements: EntitlementName[] }` resolved from the authenticated scope's active subscription, or from the `free` plan if no subscription exists.
+
+The `requireEntitlement(name)` preHandler factory in `apps/services/src/modules/subscriptions/plugins/requireEntitlement.ts` gates routes by entitlement name. Module-scope instances of `GetEntitlementsUseCase` and `SubscriptionDBRepository` are created once at plugin load; on the first invocation within a request the resolved array is cached on `request.entitlements` (a `FastifyRequest` augmentation declared in the same file) so that subsequent `requireEntitlement` calls on the same request skip the database entirely. When the required entitlement is absent the preHandler throws `EntitlementRequiredError` (HTTP 403, code `ENTITLEMENT_REQUIRED`).
+
+`subscriptionsConfig.ts` (in `src/shared/configs/`) owns the `STRICT_ENTITLEMENTS_ON_PAST_DUE` environment variable, following the project convention that all env-var access is isolated to config files.
+
+On the frontend, `useEntitlement(name: EntitlementName): boolean` in `apps/web/src/hooks/use-entitlement.ts` fetches `GET /billing/entitlements/me` via React Query with a `staleTime` of 5 minutes and query key `['billing', 'entitlements', 'me']`. All components that call `useEntitlement` share this key, deduplicating the fetch across the component tree. A 401 response is caught and treated as an empty entitlement array without propagating an error to consumers. `<EntitlementGate name="...">` in `apps/web/src/components/domain/billing/EntitlementGate.tsx` renders its `children` when the entitlement is present, or a `fallback` prop (defaulting to an inline upgrade CTA) when it is absent.

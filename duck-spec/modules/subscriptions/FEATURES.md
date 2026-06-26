@@ -231,7 +231,7 @@ Construir la pricing page en `landing` (público) y `web` (autenticado), una pá
 
 ## SUBS-005 — Entitlements / Feature Gates
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

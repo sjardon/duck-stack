@@ -1,5 +1,6 @@
 import type { SubscriptionEntity } from '../../entities/subscriptionEntity.js';
 import type { SubscriptionPlanEntity } from '../../entities/subscriptionPlanEntity.js';
+import type { SubscriptionWithPlanEntity } from '../../entities/subscriptionWithPlanEntity.js';
 
 export interface CreateSubscriptionData {
   id: string;
@@ -16,6 +17,7 @@ export interface CreateSubscriptionData {
 export interface ISubscriptionRepository {
   findActiveByScopeStatus(userId: string, orgId: string | null): Promise<SubscriptionEntity | null>;
   findByIdAndScope(id: string, userId: string, orgId: string | null): Promise<SubscriptionEntity | null>;
+  findActiveOrWithinPeriodByScope(userId: string, orgId: string | null): Promise<SubscriptionWithPlanEntity | null>;
   findPlanByCode(planCode: string): Promise<SubscriptionPlanEntity | null>;
   create(input: CreateSubscriptionData): Promise<SubscriptionEntity>;
   setCancelAtPeriodEnd(id: string): Promise<SubscriptionEntity>;

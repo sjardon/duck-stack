@@ -34,6 +34,12 @@ export class ForbiddenError extends DomainError {
   }
 }
 
+export class EntitlementRequiredError extends DomainError {
+  constructor(entitlement: string) {
+    super('ENTITLEMENT_REQUIRED', `Entitlement required: ${entitlement}`, 403);
+  }
+}
+
 export class ProviderError extends DomainError {
   constructor(message: string, statusCode: 400 | 502 = 502, originalError?: unknown) {
     super('PROVIDER_ERROR', message, statusCode, originalError);

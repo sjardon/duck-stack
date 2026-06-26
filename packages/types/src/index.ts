@@ -143,6 +143,13 @@ export interface UserProfile {
   onboarding_completed: boolean;
 }
 
+export type EntitlementName =
+  | 'advanced_analytics'
+  | 'priority_support'
+  | 'api_access'
+  | 'team_collaboration'
+  | 'white_label';
+
 export interface SubscriptionPlan {
   id: string;
   code: string;
