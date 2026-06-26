@@ -8,6 +8,9 @@ import type {
   UpsertRefundInput,
   UpsertRefundResult,
   RefundOutcome,
+  SubscriptionSyncOutcome,
+  UpdateSubscriptionStatusInput,
+  UpdateSubscriptionStatusResult,
 } from './interfaces/iMobbexBillingSyncRepository.js';
 import { DomainError, ProviderError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
@@ -19,13 +22,15 @@ export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository
     const start = Date.now();
     try {
       await this.sql`
-        INSERT INTO billing_webhook_events (provider, event_type, payload, received_at, transaction_id)
+        INSERT INTO billing_webhook_events (provider, event_type, payload, received_at, transaction_id, subscription_id, event_id)
         VALUES (
           'mobbex',
           ${input.eventType},
           ${this.sql.json(input.payload as unknown as Parameters<Sql['json']>[0])},
           now(),
-          ${input.transactionId}
+          ${input.transactionId},
+          ${input.subscriptionId ?? null},
+          ${input.eventId ?? null}
         )
       `;
       logger.info({ duration: Date.now() - start }, 'MobbexBillingSyncRepository.recordEvent');
@@ -36,6 +41,26 @@ export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository
         'MobbexBillingSyncRepository.recordEvent failed',
       );
       throw new ProviderError('Database error in MobbexBillingSyncRepository.recordEvent', 502, err);
+    }
+  }
+
+  async checkDuplicateEventId(eventId: string, provider: string): Promise<boolean> {
+    const start = Date.now();
+    try {
+      const rows = await this.sql`
+        SELECT 1 FROM billing_webhook_events
+        WHERE provider = ${provider} AND event_id = ${eventId}
+        LIMIT 1
+      `;
+      logger.info({ duration: Date.now() - start }, 'MobbexBillingSyncRepository.checkDuplicateEventId');
+      return rows.length > 0;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'MobbexBillingSyncRepository', method: 'checkDuplicateEventId' },
+        'MobbexBillingSyncRepository.checkDuplicateEventId failed',
+      );
+      throw new ProviderError('Database error in MobbexBillingSyncRepository.checkDuplicateEventId', 502, err);
     }
   }
 
@@ -294,6 +319,224 @@ export class MobbexBillingSyncRepository implements IMobbexBillingSyncRepository
         'MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded failed',
       );
       throw new ProviderError('Database error in MobbexBillingSyncRepository.upsertRefundAndMaybeMarkTransactionRefunded', 502, err);
+    }
+  }
+
+  async updateSubscriptionStatus(input: UpdateSubscriptionStatusInput): Promise<UpdateSubscriptionStatusResult> {
+    type SubRow = { id: string; status: string; current_period_start: string | null; current_period_end: string | null };
+
+    try {
+      return await this.sql.begin(async (tx) => {
+        let rows: SubRow[];
+        try {
+          const selectStart = Date.now();
+          rows = await (tx as unknown as TransactionSql)<SubRow[]>`
+            SELECT id, status, current_period_start, current_period_end
+            FROM subscriptions
+            WHERE provider_subscription_id = ${input.providerSubscriptionId}
+            LIMIT 1
+            FOR UPDATE
+          `;
+          logger.info(
+            { duration: Date.now() - selectStart },
+            'MobbexBillingSyncRepository.updateSubscriptionStatus select',
+          );
+        } catch (err: unknown) {
+          if (err instanceof DomainError) throw err;
+          logger.error(
+            { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'select' },
+            'MobbexBillingSyncRepository.updateSubscriptionStatus select failed',
+          );
+          throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+        }
+
+        if (rows.length === 0) {
+          logger.warn(
+            { providerSubscriptionId: input.providerSubscriptionId },
+            'MobbexBillingSyncRepository.updateSubscriptionStatus: subscription not found',
+          );
+          return { outcome: 'orphan' as SubscriptionSyncOutcome, subscriptionId: null, resolvedStatus: null };
+        }
+
+        const sub = rows[0];
+
+        switch (input.eventType) {
+          case 'subscription.activated': {
+            const normalizedStart = input.currentPeriodStart ?? null;
+            const normalizedEnd = input.currentPeriodEnd ?? null;
+            if (sub.status === 'active' && sub.current_period_start === normalizedStart && sub.current_period_end === normalizedEnd) {
+              return { outcome: 'noop' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+            }
+            try {
+              const updateStart = Date.now();
+              await (tx as unknown as TransactionSql)`
+                UPDATE subscriptions
+                SET status = 'active',
+                    current_period_start = ${normalizedStart},
+                    current_period_end = ${normalizedEnd},
+                    updated_at = now()
+                WHERE id = ${sub.id}
+              `;
+              logger.info(
+                { duration: Date.now() - updateStart, subscriptionId: sub.id },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update activated',
+              );
+            } catch (err: unknown) {
+              if (err instanceof DomainError) throw err;
+              logger.error(
+                { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'update activated' },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update failed',
+              );
+              throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+            }
+            return { outcome: 'applied' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+          }
+
+          case 'subscription.renewed': {
+            const normalizedEnd = input.currentPeriodEnd ?? null;
+            if (sub.status === 'active' && sub.current_period_end === normalizedEnd) {
+              return { outcome: 'noop' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+            }
+            try {
+              const updateStart = Date.now();
+              if (sub.status === 'pending') {
+                // EC001: never-activated renewal — also set status and current_period_start
+                await (tx as unknown as TransactionSql)`
+                  UPDATE subscriptions
+                  SET status = 'active',
+                      current_period_start = ${input.currentPeriodStart ?? null},
+                      current_period_end = ${normalizedEnd},
+                      updated_at = now()
+                  WHERE id = ${sub.id}
+                `;
+              } else if (sub.status === 'past_due') {
+                // R004: recover to active on renewal
+                await (tx as unknown as TransactionSql)`
+                  UPDATE subscriptions
+                  SET status = 'active',
+                      current_period_end = ${normalizedEnd},
+                      updated_at = now()
+                  WHERE id = ${sub.id}
+                `;
+              } else {
+                // R003: update period end only
+                await (tx as unknown as TransactionSql)`
+                  UPDATE subscriptions
+                  SET current_period_end = ${normalizedEnd},
+                      updated_at = now()
+                  WHERE id = ${sub.id}
+                `;
+              }
+              logger.info(
+                { duration: Date.now() - updateStart, subscriptionId: sub.id },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update renewed',
+              );
+            } catch (err: unknown) {
+              if (err instanceof DomainError) throw err;
+              logger.error(
+                { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'update renewed' },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update failed',
+              );
+              throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+            }
+            return { outcome: 'applied' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+          }
+
+          case 'subscription.payment_failed': {
+            // EC002: skip if terminal; R009: skip if already past_due
+            if (sub.status === 'canceled' || sub.status === 'expired' || sub.status === 'past_due') {
+              return { outcome: 'noop' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+            }
+            try {
+              const updateStart = Date.now();
+              await (tx as unknown as TransactionSql)`
+                UPDATE subscriptions
+                SET status = 'past_due',
+                    updated_at = now()
+                WHERE id = ${sub.id}
+              `;
+              logger.info(
+                { duration: Date.now() - updateStart, subscriptionId: sub.id },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update payment_failed',
+              );
+            } catch (err: unknown) {
+              if (err instanceof DomainError) throw err;
+              logger.error(
+                { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'update payment_failed' },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update failed',
+              );
+              throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+            }
+            return { outcome: 'applied' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+          }
+
+          case 'subscription.canceled': {
+            if (sub.status === 'canceled') {
+              return { outcome: 'noop' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+            }
+            try {
+              const updateStart = Date.now();
+              await (tx as unknown as TransactionSql)`
+                UPDATE subscriptions
+                SET status = 'canceled',
+                    canceled_at = now(),
+                    updated_at = now()
+                WHERE id = ${sub.id}
+              `;
+              logger.info(
+                { duration: Date.now() - updateStart, subscriptionId: sub.id },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update canceled',
+              );
+            } catch (err: unknown) {
+              if (err instanceof DomainError) throw err;
+              logger.error(
+                { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'update canceled' },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update failed',
+              );
+              throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+            }
+            return { outcome: 'applied' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+          }
+
+          case 'subscription.expired': {
+            if (sub.status === 'expired') {
+              return { outcome: 'noop' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+            }
+            try {
+              const updateStart = Date.now();
+              await (tx as unknown as TransactionSql)`
+                UPDATE subscriptions
+                SET status = 'expired',
+                    updated_at = now()
+                WHERE id = ${sub.id}
+              `;
+              logger.info(
+                { duration: Date.now() - updateStart, subscriptionId: sub.id },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update expired',
+              );
+            } catch (err: unknown) {
+              if (err instanceof DomainError) throw err;
+              logger.error(
+                { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus', step: 'update expired' },
+                'MobbexBillingSyncRepository.updateSubscriptionStatus update failed',
+              );
+              throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
+            }
+            return { outcome: 'applied' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+          }
+
+          default:
+            return { outcome: 'orphan' as SubscriptionSyncOutcome, subscriptionId: sub.id, resolvedStatus: sub.status };
+        }
+      });
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      // Safety net: catches errors from sql.begin itself (not sub-query bodies)
+      logger.error(
+        { err, repository: 'MobbexBillingSyncRepository', method: 'updateSubscriptionStatus' },
+        'MobbexBillingSyncRepository.updateSubscriptionStatus failed',
+      );
+      throw new ProviderError('Database error in MobbexBillingSyncRepository.updateSubscriptionStatus', 502, err);
     }
   }
 }

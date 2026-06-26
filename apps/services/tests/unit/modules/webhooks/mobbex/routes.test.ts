@@ -42,6 +42,19 @@ jest.mock('../../../../../src/modules/webhooks/mobbex/mobbexEventHandlers.js', (
   dispatchMobbexEvent: (...args: unknown[]) => mockDispatch(...args),
 }));
 
+// Mock dispatchMobbexSubscriptionEvent and SUBSCRIPTION_EVENT_TYPES
+const mockSubscriptionDispatch = jest.fn().mockResolvedValue('applied');
+jest.mock('../../../../../src/modules/webhooks/mobbex/mobbexSubscriptionEventHandlers.js', () => ({
+  SUBSCRIPTION_EVENT_TYPES: new Set([
+    'subscription.activated',
+    'subscription.renewed',
+    'subscription.payment_failed',
+    'subscription.canceled',
+    'subscription.expired',
+  ]),
+  dispatchMobbexSubscriptionEvent: (...args: unknown[]) => mockSubscriptionDispatch(...args),
+}));
+
 import { logger } from '../../../../../src/shared/infrastructure/logger.js';
 import mobbexWebhookRoutes from '../../../../../src/modules/webhooks/mobbex/routes.js';
 
@@ -60,6 +73,7 @@ async function buildApp() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockDispatch.mockResolvedValue('approved');
+  mockSubscriptionDispatch.mockResolvedValue('applied');
   mockWebhookSecret = 'correct-secret';
 });
 
@@ -212,5 +226,39 @@ describe('mobbexWebhookRoutes — registration in app.ts', () => {
     const app = await buildApp();
     const routes = app.printRoutes();
     expect(routes).toContain('webhooks/billing/mobbex');
+  });
+});
+
+// T019 — subscription event routing (R001, R011)
+
+describe('mobbexWebhookRoutes — subscription event routing (R001, R011)', () => {
+  it('WHEN payload type is subscription.activated THEN responds HTTP 200 AND dispatchMobbexSubscriptionEvent is called AND dispatchMobbexEvent is NOT called', async () => {
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
+      payload: Buffer.from(JSON.stringify({ type: 'subscription.activated', data: { subscription_id: 'psub-1' } })),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockSubscriptionDispatch).toHaveBeenCalledTimes(1);
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+
+  it('WHEN payload type is payment.success THEN dispatchMobbexEvent is called AND dispatchMobbexSubscriptionEvent is NOT called', async () => {
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/billing/mobbex?secret=correct-secret',
+      payload: Buffer.from(JSON.stringify({ type: 'payment.success', data: { id: 'ptx-001' } })),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockDispatch).toHaveBeenCalledTimes(1);
+    expect(mockSubscriptionDispatch).not.toHaveBeenCalled();
   });
 });

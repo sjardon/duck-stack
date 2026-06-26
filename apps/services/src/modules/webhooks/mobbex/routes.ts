@@ -4,6 +4,7 @@ import { mobbexConfig } from '../../../shared/configs/mobbexConfig.js';
 import { db } from '../../../shared/infrastructure/db.js';
 import { MobbexBillingSyncRepository } from '../repositories/mobbexBillingSyncRepository.js';
 import { dispatchMobbexEvent } from './mobbexEventHandlers.js';
+import { SUBSCRIPTION_EVENT_TYPES, dispatchMobbexSubscriptionEvent } from './mobbexSubscriptionEventHandlers.js';
 import { UnauthorizedError, ValidationError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 
@@ -60,7 +61,9 @@ export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
       const refundAmount = (data['amount'] as number | undefined) ?? null;
 
       // Dispatch to handlers (R002, R003, R007-R011, EC001-EC006)
-      const outcome = await dispatchMobbexEvent(payload, repository);
+      const outcome = SUBSCRIPTION_EVENT_TYPES.has(eventType)
+        ? await dispatchMobbexSubscriptionEvent(payload, repository)
+        : await dispatchMobbexEvent(payload, repository);
 
       // Structured log (NF002, NF003) — no secret, no full payload, no PII
       request.log.info(
