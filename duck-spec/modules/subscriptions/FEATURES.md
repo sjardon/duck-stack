@@ -283,7 +283,7 @@ Definir un mapeo `plan.code → entitlements` y exponer un mecanismo backend (pr
 
 ## SUBS-006 — Plan Usage Quotas (backend)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

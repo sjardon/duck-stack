@@ -6,6 +6,7 @@ import {
   ForbiddenError,
   ProviderError,
   EntitlementRequiredError,
+  QuotaExceededError,
 } from '../../../src/shared/errors.js';
 
 // T001 — R001, R003: DomainError stores originalError
@@ -113,6 +114,47 @@ describe('EntitlementRequiredError — construction (R004)', () => {
   it('WHEN constructed THEN it is an instance of DomainError', () => {
     const err = new EntitlementRequiredError('white_label');
     expect(err).toBeInstanceOf(DomainError);
+  });
+});
+
+// T010 — R004: QuotaExceededError structure
+describe('QuotaExceededError — construction (R004)', () => {
+  const err = new QuotaExceededError('api_requests', 101, 80, 100, '2026-07-01T00:00:00.000Z');
+
+  it('WHEN constructed THEN statusCode is 429', () => {
+    expect(err.statusCode).toBe(429);
+  });
+
+  it('WHEN constructed THEN code is QUOTA_EXCEEDED', () => {
+    expect(err.code).toBe('QUOTA_EXCEEDED');
+  });
+
+  it('WHEN constructed THEN quotaName is accessible as public property', () => {
+    expect(err.quotaName).toBe('api_requests');
+  });
+
+  it('WHEN constructed THEN count is accessible as public property', () => {
+    expect(err.count).toBe(101);
+  });
+
+  it('WHEN constructed THEN soft_limit is accessible as public property', () => {
+    expect(err.soft_limit).toBe(80);
+  });
+
+  it('WHEN constructed THEN hard_limit is accessible as public property', () => {
+    expect(err.hard_limit).toBe(100);
+  });
+
+  it('WHEN constructed THEN period_end is accessible as public property', () => {
+    expect(err.period_end).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('WHEN constructed THEN it is an instance of DomainError', () => {
+    expect(err).toBeInstanceOf(DomainError);
+  });
+
+  it('WHEN constructed THEN message contains the quota name', () => {
+    expect(err.message).toContain('api_requests');
   });
 });
 

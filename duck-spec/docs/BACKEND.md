@@ -76,8 +76,11 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `ForbiddenError` | 403 | `FORBIDDEN` |
 | `ProviderError` | 502 or 400 | `PROVIDER_ERROR` |
 | `EntitlementRequiredError` | 403 | `ENTITLEMENT_REQUIRED` |
+| `QuotaExceededError` | 429 | `QUOTA_EXCEEDED` |
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
+
+`QuotaExceededError` carries structured quota fields (`quota`, `count`, `soft_limit`, `hard_limit`, `period_end`) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and serializes all five extra fields alongside `code` and `message` in the 429 response body. This is the only `DomainError` subclass for which `errorHandler` emits a response body richer than `{ code, message }`.
 
 `shared/plugins/errorHandler.ts` intercepts every error: `DomainError` instances are serialized as `{ code, message }` at the error's `statusCode`; any other error is replied as a fixed `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` at status 500, with the real detail logged but never sent to the client. See the next section for the full propagation and logging contract.
 
@@ -163,6 +166,14 @@ Neither preHandler is registered globally. Routes opt in by listing the relevant
 `requireEntitlement(name: EntitlementName)` in `apps/services/src/modules/subscriptions/plugins/requireEntitlement.ts` is a **preHandler factory**: it accepts an entitlement name and returns a Fastify `preHandler` function. This pattern is distinct from `requireAuth`/`requireOrg` (plain functions) because the behavior is parameterized per route.
 
 Module-scope instances of `GetEntitlementsUseCase` and `SubscriptionDBRepository` are created once at plugin load time. On first invocation within a request the resolved array is written to `request.entitlements` (`FastifyRequest` augmentation declared in the same file); subsequent `requireEntitlement` calls in the same request skip the database. When the required entitlement is absent the factory-returned handler throws `EntitlementRequiredError` (HTTP 403, code `ENTITLEMENT_REQUIRED`). `request.entitlements` augmentation is declared in the same file as the factory, collocating the type extension with the only code that writes it.
+
+### Quota preHandler
+
+`requireQuota(name: string)` in `apps/services/src/modules/subscriptions/plugins/requireQuota.ts` is a **preHandler factory** that enforces numeric usage limits per billing period. It accepts a quota name and returns a Fastify `preHandler` function. Module-scope singletons (`SubscriptionDBRepository`, `UsageCounterDBRepository`, `RequireQuotaUseCase`) are instantiated once at plugin load time.
+
+The returned preHandler resolves the effective scope (if `request.orgId` is set, the organization owns the counter; otherwise the user does) and delegates to `RequireQuotaUseCase`. The use case calls `ensureActiveSubscription` to obtain or lazily create the scope's active subscription, looks up the plan's threshold for the named quota from the `PLAN_QUOTAS` code-level mapping in `entitlements.ts`, and issues a single atomic `INSERT … ON CONFLICT (user_id, org_id, quota_name, period_start) DO UPDATE SET count = usage_counters.count + 1 RETURNING count` against the `usage_counters` table. If the returned count exceeds `hard_limit` the use case throws `QuotaExceededError`; if the plan does not define the quota name the use case returns without touching the database (unlimited). Period rollover is natural: a new `current_period_start` does not match the existing unique-constraint key, causing the upsert to insert a fresh row.
+
+`ensureActiveSubscription` in `apps/services/src/modules/subscriptions/helpers/ensureActiveSubscription.ts` is a plain async helper (not a use case) shared between `RequireQuotaUseCase` and `GetMyQuotasUseCase`. When `findActiveOrWithinPeriodByScope` returns null it inserts a synthetic subscription with `plan_code = 'free'`, `status = 'active'`, and `current_period_start = date_trunc('month', now())`; a unique-constraint violation on the concurrent insert is caught and resolved by re-reading the now-existing row.
 
 ## Database client
 
