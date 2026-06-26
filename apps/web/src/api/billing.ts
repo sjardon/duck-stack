@@ -1,5 +1,13 @@
-import type { CreateCheckoutInput, Transaction, TransactionListResponse } from '@repo/types';
-import { apiFetch } from './client';
+import type {
+  CreateCheckoutInput,
+  Transaction,
+  TransactionListResponse,
+  SubscriptionPlan,
+  Subscription,
+  CreateSubscriptionInput,
+  CancelSubscriptionInput,
+} from '@repo/types';
+import { apiFetch, ApiError } from './client';
 
 export async function createCheckout(
   token: string,
@@ -31,4 +39,47 @@ export async function listTransactions(
   const qs = query.toString();
   const path = qs ? `/billing/transactions?${qs}` : '/billing/transactions';
   return apiFetch<TransactionListResponse>(path, { token });
+}
+
+export async function listPlans(): Promise<SubscriptionPlan[]> {
+  const response = await apiFetch<{ data: SubscriptionPlan[] }>('/billing/plans');
+  return response.data;
+}
+
+export async function subscribe(
+  token: string,
+  body: CreateSubscriptionInput,
+): Promise<{ subscriptionId: string; checkoutUrl?: string }> {
+  return apiFetch<{ subscriptionId: string; checkoutUrl?: string }>('/billing/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    token,
+  });
+}
+
+export async function getMySubscription(token: string): Promise<Subscription | null> {
+  try {
+    const response = await apiFetch<{ subscription: Subscription | null }>(
+      '/billing/subscriptions/me',
+      { token },
+    );
+    return response.subscription;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function cancelSubscription(
+  token: string,
+  id: string,
+  body: CancelSubscriptionInput,
+): Promise<void> {
+  await apiFetch<{ subscription: unknown }>(`/billing/subscriptions/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    token,
+  });
 }

@@ -7,6 +7,8 @@ import CreateOrgPage from "./pages/org/CreateOrgPage";
 import OrgProfilePage from "./pages/org/OrgProfilePage";
 import ProfilePage from "./pages/profile/ProfilePage";
 import OnboardingPage from "./pages/onboarding/OnboardingPage";
+import BillingPage from "./pages/billing/BillingPage";
+import SubscribePage from "./pages/billing/SubscribePage";
 
 export const router = createBrowserRouter([
   {
@@ -39,7 +41,10 @@ export const router = createBrowserRouter([
       {
         path: "/*",
         element: <AppLayout />,
-        children: [],
+        children: [
+          { path: "billing", element: <BillingPage /> },
+          { path: "billing/subscribe", element: <SubscribePage /> },
+        ],
       },
     ],
   },
