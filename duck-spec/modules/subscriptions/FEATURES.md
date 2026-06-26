@@ -114,7 +114,7 @@ Permitir al usuario u organización suscribirse a un plan (excluyendo `free`), p
 
 ## SUBS-003 — Subscription Lifecycle Webhooks
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
