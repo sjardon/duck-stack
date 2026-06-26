@@ -51,6 +51,7 @@ function makeRepo(overrides: Partial<ISubscriptionRepository> = {}): ISubscripti
     create: jest.fn(),
     setCancelAtPeriodEnd: jest.fn().mockResolvedValue({ ...activeSubscription, cancel_at_period_end: true }),
     cancelImmediately: jest.fn().mockResolvedValue({ ...activeSubscription, status: 'canceled', canceled_at: '2026-06-24T12:00:00.000Z' }),
+    findActiveOrWithinPeriodByScope: jest.fn().mockResolvedValue(null),
     ...overrides,
   };
 }

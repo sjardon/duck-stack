@@ -12,6 +12,7 @@ import { ProviderError } from '../../../../src/shared/errors.js';
 import { logger } from '../../../../src/shared/infrastructure/logger.js';
 import type { SubscriptionEntity } from '../../../../src/modules/subscriptions/entities/subscriptionEntity.js';
 import type { SubscriptionPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
+import type { SubscriptionWithPlanEntity } from '../../../../src/modules/subscriptions/entities/subscriptionWithPlanEntity.js';
 import type { CreateSubscriptionData } from '../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 
 const mockLogger = logger as unknown as {
@@ -197,6 +198,64 @@ describe('SubscriptionDBRepository.findByIdAndScope — scope-checked lookup', (
   });
 });
 
+// T010 — findActiveOrWithinPeriodByScope tests (R002)
+
+const baseSubscriptionWithPlan: SubscriptionWithPlanEntity = {
+  ...baseSubscription,
+  plan_code: 'pro',
+};
+
+describe('SubscriptionDBRepository.findActiveOrWithinPeriodByScope — active and within-period lookup (R002)', () => {
+  it('WHEN a non-terminal subscription exists THEN it is returned with plan_code', async () => {
+    const { sql } = makeSqlMock([baseSubscriptionWithPlan]);
+    const repo = new SubscriptionDBRepository(sql as never);
+
+    const result = await repo.findActiveOrWithinPeriodByScope('user-001', null);
+
+    expect(result).toEqual(baseSubscriptionWithPlan);
+    expect(result?.plan_code).toBe('pro');
+  });
+
+  it('WHEN a canceled-but-within-period subscription exists THEN it is returned', async () => {
+    const canceledWithinPeriod: SubscriptionWithPlanEntity = {
+      ...baseSubscriptionWithPlan,
+      status: 'canceled',
+      canceled_at: '2026-06-20T00:00:00.000Z',
+      current_period_end: '2026-07-24T00:00:00.000Z',
+    };
+    const { sql } = makeSqlMock([canceledWithinPeriod]);
+    const repo = new SubscriptionDBRepository(sql as never);
+
+    const result = await repo.findActiveOrWithinPeriodByScope('user-001', null);
+
+    expect(result).toEqual(canceledWithinPeriod);
+  });
+
+  it('WHEN only expired or past-period subscriptions exist THEN returns null', async () => {
+    const { sql } = makeSqlMock([]);
+    const repo = new SubscriptionDBRepository(sql as never);
+
+    const result = await repo.findActiveOrWithinPeriodByScope('user-001', null);
+
+    expect(result).toBeNull();
+  });
+
+  it('WHEN called for an org scope THEN queries by org_id', async () => {
+    const orgSub: SubscriptionWithPlanEntity = {
+      ...baseSubscriptionWithPlan,
+      user_id: 'user-001',
+      org_id: 'org-001',
+    };
+    const { sql, mockFn } = makeSqlMock([orgSub]);
+    const repo = new SubscriptionDBRepository(sql as never);
+
+    const result = await repo.findActiveOrWithinPeriodByScope('user-001', 'org-001');
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(orgSub);
+  });
+});
+
 // T003 — SQL error path tests
 
 describe('SubscriptionDBRepository — SQL error paths (R001, R002, R007, NF001, NF002, NF003)', () => {
@@ -235,6 +294,10 @@ describe('SubscriptionDBRepository — SQL error paths (R001, R002, R007, NF001,
     {
       name: 'cancelImmediately',
       call: (repo) => repo.cancelImmediately('sub-001'),
+    },
+    {
+      name: 'findActiveOrWithinPeriodByScope',
+      call: (repo) => repo.findActiveOrWithinPeriodByScope('user-001', null),
     },
   ];
 

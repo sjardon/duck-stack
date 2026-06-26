@@ -75,6 +75,7 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `UnauthorizedError` | 401 | `UNAUTHORIZED` |
 | `ForbiddenError` | 403 | `FORBIDDEN` |
 | `ProviderError` | 502 or 400 | `PROVIDER_ERROR` |
+| `EntitlementRequiredError` | 403 | `ENTITLEMENT_REQUIRED` |
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
@@ -157,6 +158,12 @@ Two reusable preHandler functions live in `src/shared/plugins/`:
 
 Neither preHandler is registered globally. Routes opt in by listing the relevant function in their `preHandler` array. Organization-scoped enforcement is a per-route decision — the starter does not impose it globally.
 
+### Entitlement preHandler
+
+`requireEntitlement(name: EntitlementName)` in `apps/services/src/modules/subscriptions/plugins/requireEntitlement.ts` is a **preHandler factory**: it accepts an entitlement name and returns a Fastify `preHandler` function. This pattern is distinct from `requireAuth`/`requireOrg` (plain functions) because the behavior is parameterized per route.
+
+Module-scope instances of `GetEntitlementsUseCase` and `SubscriptionDBRepository` are created once at plugin load time. On first invocation within a request the resolved array is written to `request.entitlements` (`FastifyRequest` augmentation declared in the same file); subsequent `requireEntitlement` calls in the same request skip the database. When the required entitlement is absent the factory-returned handler throws `EntitlementRequiredError` (HTTP 403, code `ENTITLEMENT_REQUIRED`). `request.entitlements` augmentation is declared in the same file as the factory, collocating the type extension with the only code that writes it.
+
 ## Database client
 
 `shared/infrastructure/db.ts` exports a `postgres.js` `Sql` singleton created from `DATABASE_URL`. Throws a descriptive error synchronously at module load time if `DATABASE_URL` is absent or empty, preventing the server from starting. Repositories import this singleton directly and execute all queries as tagged-template SQL calls over a direct TCP connection to Postgres. `@supabase/supabase-js` is not a runtime dependency of `apps/services`.
@@ -237,6 +244,7 @@ Unit tests live under `apps/services/tests/unit/` using Jest. Interface mocks li
 | `serverConfig.ts` | `NODE_ENV`, `LOG_LEVEL`, `HOST`, `PORT`, `CORS_ORIGIN` |
 | `authConfig.ts` | `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` |
 | `mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
+| `subscriptionsConfig.ts` | `STRICT_ENTITLEMENTS_ON_PAST_DUE` |
 | `dbConfig.ts` | (database connection — see Database client section) |
 
 Use this shape:

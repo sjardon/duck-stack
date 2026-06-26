@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import type { SubscriptionEntity } from '../entities/subscriptionEntity.js';
 import type { SubscriptionPlanEntity } from '../entities/subscriptionPlanEntity.js';
+import type { SubscriptionWithPlanEntity } from '../entities/subscriptionWithPlanEntity.js';
 import type { ISubscriptionRepository, CreateSubscriptionData } from './interfaces/iSubscriptionRepository.js';
 import { DomainError, ProviderError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
@@ -166,6 +167,64 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         'SubscriptionDBRepository.setCancelAtPeriodEnd failed',
       );
       throw new ProviderError('Database error in SubscriptionDBRepository.setCancelAtPeriodEnd', 502, err);
+    }
+  }
+
+  async findActiveOrWithinPeriodByScope(userId: string, orgId: string | null): Promise<SubscriptionWithPlanEntity | null> {
+    const start = Date.now();
+    try {
+      let rows: SubscriptionWithPlanEntity[];
+
+      if (orgId !== null) {
+        rows = await this.sql<SubscriptionWithPlanEntity[]>`
+          SELECT s.id, s.user_id, s.org_id, s.plan_id, s.provider,
+                 s.provider_subscription_id, s.status,
+                 s.current_period_start, s.current_period_end,
+                 s.cancel_at_period_end, s.canceled_at, s.created_at, s.updated_at,
+                 sp.code AS plan_code
+          FROM subscriptions s
+          JOIN subscription_plans sp ON sp.id = s.plan_id
+          WHERE s.org_id = ${orgId}
+            AND (
+              s.status NOT IN ('canceled', 'expired')
+              OR (s.status = 'canceled' AND s.current_period_end > NOW())
+            )
+          ORDER BY
+            CASE WHEN s.status NOT IN ('canceled', 'expired') THEN 0 ELSE 1 END ASC,
+            s.created_at DESC
+          LIMIT 1
+        `;
+      } else {
+        rows = await this.sql<SubscriptionWithPlanEntity[]>`
+          SELECT s.id, s.user_id, s.org_id, s.plan_id, s.provider,
+                 s.provider_subscription_id, s.status,
+                 s.current_period_start, s.current_period_end,
+                 s.cancel_at_period_end, s.canceled_at, s.created_at, s.updated_at,
+                 sp.code AS plan_code
+          FROM subscriptions s
+          JOIN subscription_plans sp ON sp.id = s.plan_id
+          WHERE s.user_id = ${userId}
+            AND s.org_id IS NULL
+            AND (
+              s.status NOT IN ('canceled', 'expired')
+              OR (s.status = 'canceled' AND s.current_period_end > NOW())
+            )
+          ORDER BY
+            CASE WHEN s.status NOT IN ('canceled', 'expired') THEN 0 ELSE 1 END ASC,
+            s.created_at DESC
+          LIMIT 1
+        `;
+      }
+
+      logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.findActiveOrWithinPeriodByScope');
+      return rows[0] ?? null;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'SubscriptionDBRepository', method: 'findActiveOrWithinPeriodByScope' },
+        'SubscriptionDBRepository.findActiveOrWithinPeriodByScope failed',
+      );
+      throw new ProviderError('Database error in SubscriptionDBRepository.findActiveOrWithinPeriodByScope', 502, err);
     }
   }
 

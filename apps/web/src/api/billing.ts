@@ -1,5 +1,6 @@
 import type {
   CreateCheckoutInput,
+  EntitlementName,
   Transaction,
   TransactionListResponse,
   SubscriptionPlan,
@@ -70,6 +71,11 @@ export async function getMySubscription(token: string): Promise<Subscription | n
     }
     throw err;
   }
+}
+
+export async function getMyEntitlements(token: string): Promise<EntitlementName[]> {
+  const response = await apiFetch<{ entitlements: EntitlementName[] }>('/billing/entitlements/me', { token });
+  return response.entitlements;
 }
 
 export async function cancelSubscription(

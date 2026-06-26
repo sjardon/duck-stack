@@ -5,6 +5,7 @@ import {
   UnauthorizedError,
   ForbiddenError,
   ProviderError,
+  EntitlementRequiredError,
 } from '../../../src/shared/errors.js';
 
 // T001 — R001, R003: DomainError stores originalError
@@ -89,6 +90,29 @@ describe('DomainError subclasses — originalError parameter (R003)', () => {
     const cause = new Error('bad request to provider');
     const err = new ProviderError('Bad provider input', 400, cause);
     expect(err.originalError).toBe(cause);
+  });
+});
+
+// T004 — R004: EntitlementRequiredError
+describe('EntitlementRequiredError — construction (R004)', () => {
+  it('WHEN constructed THEN code is ENTITLEMENT_REQUIRED', () => {
+    const err = new EntitlementRequiredError('advanced_analytics');
+    expect(err.code).toBe('ENTITLEMENT_REQUIRED');
+  });
+
+  it('WHEN constructed THEN statusCode is 403', () => {
+    const err = new EntitlementRequiredError('api_access');
+    expect(err.statusCode).toBe(403);
+  });
+
+  it('WHEN constructed THEN message contains the entitlement name', () => {
+    const err = new EntitlementRequiredError('team_collaboration');
+    expect(err.message).toContain('team_collaboration');
+  });
+
+  it('WHEN constructed THEN it is an instance of DomainError', () => {
+    const err = new EntitlementRequiredError('white_label');
+    expect(err).toBeInstanceOf(DomainError);
   });
 });
 

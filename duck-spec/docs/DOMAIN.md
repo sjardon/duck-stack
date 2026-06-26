@@ -46,3 +46,13 @@ Shared interface exported from `packages/types/src/index.ts`. Consumed by `apps/
 | `updated_at` | `string` | no | ISO 8601 timestamp |
 
 `SubscriptionPlan` has no runtime dependencies. It is a pure TypeScript interface with no class implementation.
+
+---
+
+## `EntitlementName`
+
+String-literal union exported from `packages/types/src/index.ts`. Consumed by `apps/services` (as the element type of `PLAN_ENTITLEMENTS` values and `request.entitlements`) and by `apps/web` (as the argument type for `useEntitlement` and `<EntitlementGate>`).
+
+Defined members: `'advanced_analytics'`, `'priority_support'`, `'api_access'`, `'team_collaboration'`, `'white_label'`.
+
+`EntitlementName` is the authoritative type for entitlement identity across the stack. The backend never materializes entitlement names from the database — they are declared in code as members of this union. Adding a new entitlement requires updating both this type and the `PLAN_ENTITLEMENTS` mapping in `subscriptions/entitlements.ts`. `components/ui/` components must not reference `EntitlementName` directly; only `components/domain/` and hooks may import it.
