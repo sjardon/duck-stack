@@ -7,6 +7,8 @@ import type {
   Subscription,
   CreateSubscriptionInput,
   CancelSubscriptionInput,
+  QuotaUsage,
+  QuotasResponse,
 } from '@repo/types';
 import { apiFetch, ApiError } from './client';
 
@@ -76,6 +78,11 @@ export async function getMySubscription(token: string): Promise<Subscription | n
 export async function getMyEntitlements(token: string): Promise<EntitlementName[]> {
   const response = await apiFetch<{ entitlements: EntitlementName[] }>('/billing/entitlements/me', { token });
   return response.entitlements;
+}
+
+export async function getMyQuotas(token: string): Promise<QuotaUsage[]> {
+  const response = await apiFetch<QuotasResponse>('/billing/quotas/me', { token });
+  return response.quotas;
 }
 
 export async function cancelSubscription(

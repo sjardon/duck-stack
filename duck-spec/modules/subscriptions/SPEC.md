@@ -60,3 +60,23 @@ The `requireEntitlement(name)` preHandler factory in `apps/services/src/modules/
 `subscriptionsConfig.ts` (in `src/shared/configs/`) owns the `STRICT_ENTITLEMENTS_ON_PAST_DUE` environment variable, following the project convention that all env-var access is isolated to config files.
 
 On the frontend, `useEntitlement(name: EntitlementName): boolean` in `apps/web/src/hooks/use-entitlement.ts` fetches `GET /billing/entitlements/me` via React Query with a `staleTime` of 5 minutes and query key `['billing', 'entitlements', 'me']`. All components that call `useEntitlement` share this key, deduplicating the fetch across the component tree. A 401 response is caught and treated as an empty entitlement array without propagating an error to consumers. `<EntitlementGate name="...">` in `apps/web/src/components/domain/billing/EntitlementGate.tsx` renders its `children` when the entitlement is present, or a `fallback` prop (defaulting to an inline upgrade CTA) when it is absent.
+
+---
+
+## Quota UI Gates (SUBS-007)
+
+The frontend exposes quota state to React component trees via two primitives in `apps/web`.
+
+`useQuota(name: QuotaName)` in `apps/web/src/hooks/useQuota.ts` fetches `GET /billing/quotas/me` via React Query under the shared key `['billing', 'quotas', 'me']` with a `staleTime` of 60 seconds and `refetchOnWindowFocus: true`. All instances on a given page share a single cache entry, issuing at most one network request per stale window. The hook filters the response array to the entry matching `name` and returns `{ count, soft_limit, hard_limit, state, period_end, isLoading }`. When no entry matches `name` (the scope's plan defines no such quota), the hook returns `state = 'normal'` and `hard_limit = Infinity`. While the initial fetch is in flight, `isLoading` is `true` and `state` is `'normal'`, so the component tree is never blocked during first load. `QuotaName`, `QuotaUsage`, and `QuotaState` are imported from `@repo/types`; the frontend does not redeclare them.
+
+`useInvalidateQuotas()`, exported from the same file, calls `queryClient.invalidateQueries({ queryKey: ['billing', 'quotas', 'me'] })`. Consumers invoke it after mutations that the backend counts against a quota to immediately refresh the cached usage state.
+
+`<QuotaGate>` in `apps/web/src/components/domain/billing/QuotaGate.tsx` calls `useQuota(name)` internally and selects one of three rendering branches, with `hard_exceeded` taking unconditional precedence over `soft_exceeded` and `normal`:
+
+| `state` | Rendered output |
+|---|---|
+| `hard_exceeded` | `fallbackBlocked` prop, or default blocked message with upgrade CTA when applicable |
+| `soft_exceeded` | `children` plus `fallbackWarning` prop, or `children` plus default warning banner with upgrade CTA when applicable |
+| `normal` (including loading) | `children` only |
+
+The upgrade CTA is resolved by composing `usePlans()` and `useMySubscription()`. The next plan is the first plan in the catalog (sorted by `price` ascending) whose `price` exceeds `currentPlan.price`. When no such plan exists — either because the user is already on the highest-priced plan or because the user's plan has been removed from the catalog with no higher-priced successor — the CTA is replaced with the informational message "You are on our highest plan — contact us for custom limits". No upgrade CTA is rendered at all when `state` is `'normal'`.

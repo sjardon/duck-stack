@@ -151,6 +151,41 @@ Defined in `apps/web/src/hooks/use-entitlement.ts`. Fetches `GET /billing/entitl
 
 Defined in `apps/web/src/components/domain/billing/EntitlementGate.tsx`. Renders `children` when `useEntitlement(name)` is `true`; renders `fallback` (defaulting to an inline upgrade CTA) when `false`. Consumers supply a typed `EntitlementName` (from `@repo/types`) as the `name` prop. The component does not manage loading state — during the initial query window it treats the entitlement as absent, so the upgrade CTA is shown briefly until the response arrives. If this flicker is unacceptable for a given use case, consumers should guard with a loading check before rendering `<EntitlementGate>`.
 
+## Quota gating
+
+`apps/web` provides three primitives for rendering UI based on the authenticated scope's numeric quota usage. All three are colocated in the billing domain.
+
+### `useQuota(name: QuotaName)`
+
+Defined in `apps/web/src/hooks/useQuota.ts`. Fetches `GET /billing/quotas/me` via React Query with query key `['billing', 'quotas', 'me']`, `staleTime: 60_000` (60 s), and `refetchOnWindowFocus: true`. All components that call `useQuota` share this single cache entry — at most one network request is issued per stale window regardless of how many hook instances are mounted. The hook filters the response array to the entry whose `name` matches the argument and returns:
+
+| Field | Type | Value when loading or entry absent |
+|---|---|---|
+| `count` | `number` | `0` |
+| `soft_limit` | `number` | `Infinity` |
+| `hard_limit` | `number` | `Infinity` |
+| `state` | `QuotaState` | `'normal'` |
+| `period_end` | `string` | `''` |
+| `isLoading` | `boolean` | `true` |
+
+When `isLoading` is `true` or the named quota is not defined on the scope's plan, `state` is `'normal'` so the component tree is not blocked during first load. `QuotaName`, `QuotaUsage`, and `QuotaState` are imported from `@repo/types`; the frontend does not redeclare them.
+
+### `useInvalidateQuotas()`
+
+Also exported from `apps/web/src/hooks/useQuota.ts`. Returns a function that calls `queryClient.invalidateQueries({ queryKey: ['billing', 'quotas', 'me'] })`. Consumers call it after a mutation that the backend counts against a quota to immediately refresh cached usage data rather than waiting for `staleTime` to expire or the window to regain focus.
+
+### `<QuotaGate name="..." fallbackBlocked={...} fallbackWarning={...}>`
+
+Defined in `apps/web/src/components/domain/billing/QuotaGate.tsx`. Calls `useQuota(name)` internally — no quota data needs to be wired from the page. Selects a rendering branch with `hard_exceeded` taking unconditional precedence:
+
+| `state` | Rendered output |
+|---|---|
+| `hard_exceeded` | `fallbackBlocked` prop, or default blocked message with upgrade CTA when applicable |
+| `soft_exceeded` | `children` plus `fallbackWarning` prop, or `children` plus default warning banner with upgrade CTA when applicable |
+| `normal` (including while loading) | `children` only |
+
+The upgrade CTA is resolved by composing `usePlans()` and `useMySubscription()`. The next plan is the first entry in the catalog (sorted by `price` ascending) with `price > currentPlan.price`. When the user is already on the highest-priced plan, or the user's plan has been removed from the catalog with no higher-priced successor, the CTA is replaced with "You are on our highest plan — contact us for custom limits". No CTA is rendered when `state` is `'normal'`. The domain-component-calls-hook pattern is an established convention in the billing domain (also used by `<EntitlementGate>`) and is an intentional exception to the strict unidirectional import rule.
+
 ## Shared domain types
 
 Frontend apps import shared TypeScript interfaces from `@repo/types` via the pnpm workspace link. `components/ui/` components must not import from `@repo/types` — domain awareness is reserved for `components/domain/` and above.
