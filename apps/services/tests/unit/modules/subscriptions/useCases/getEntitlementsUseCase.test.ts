@@ -28,6 +28,7 @@ const baseSubscription: SubscriptionWithPlanEntity = {
   current_period_end: '2026-07-24T00:00:00.000Z',
   cancel_at_period_end: false,
   canceled_at: null,
+  trial_ends_at: null,
   created_at: '2026-06-24T00:00:00.000Z',
   updated_at: '2026-06-24T00:00:00.000Z',
   plan_code: 'pro',

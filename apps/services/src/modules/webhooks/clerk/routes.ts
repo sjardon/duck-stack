@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { verifyWebhook } from '@clerk/backend/webhooks';
 import { db } from '../../../shared/infrastructure/db.js';
 import { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
+import { SubscriptionDBRepository } from '../../subscriptions/repositories/subscriptionDBRepository.js';
 import { dispatchClerkEvent } from './clerkEventHandlers.js';
 import { authConfig } from '../../../shared/configs/authConfig.js';
 import { ValidationError } from '../../../shared/errors.js';
@@ -19,6 +20,7 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
   }
 
   const repository = new ClerkSyncRepository(db);
+  const subscriptionRepository = new SubscriptionDBRepository(db);
 
   // Capture raw body as Buffer so Svix signature verification succeeds (NF001).
   // This content-type parser is scoped to this plugin only.
@@ -65,7 +67,7 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
     }
 
     // Dispatch to the appropriate event handler (R009–R012, EC002)
-    await dispatchClerkEvent(event, repository);
+    await dispatchClerkEvent(event, repository, subscriptionRepository);
 
     // Success (R008, NF002)
     return reply.status(200).send({ received: true });

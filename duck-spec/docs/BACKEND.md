@@ -77,10 +77,13 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `ProviderError` | 502 or 400 | `PROVIDER_ERROR` |
 | `EntitlementRequiredError` | 403 | `ENTITLEMENT_REQUIRED` |
 | `QuotaExceededError` | 429 | `QUOTA_EXCEEDED` |
+| `TrialExpiredError` | 403 | `TRIAL_EXPIRED` |
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
-`QuotaExceededError` carries structured quota fields (`quota`, `count`, `soft_limit`, `hard_limit`, `period_end`) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and serializes all five extra fields alongside `code` and `message` in the 429 response body. This is the only `DomainError` subclass for which `errorHandler` emits a response body richer than `{ code, message }`.
+`QuotaExceededError` carries structured quota fields (`quota`, `count`, `soft_limit`, `hard_limit`, `period_end`) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and serializes all five extra fields alongside `code` and `message` in the 429 response body.
+
+`TrialExpiredError` carries `trialEndedAt` (the ISO timestamp when the trial expired) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and serializes `trialEndedAt` alongside `code` and `message` in the 403 response body. Both `QuotaExceededError` and `TrialExpiredError` are `DomainError` subclasses for which `errorHandler` emits a response body richer than `{ code, message }`.
 
 `shared/plugins/errorHandler.ts` intercepts every error: `DomainError` instances are serialized as `{ code, message }` at the error's `statusCode`; any other error is replied as a fixed `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` at status 500, with the real detail logged but never sent to the client. See the next section for the full propagation and logging contract.
 
@@ -173,7 +176,11 @@ Module-scope instances of `GetEntitlementsUseCase` and `SubscriptionDBRepository
 
 The returned preHandler resolves the effective scope (if `request.orgId` is set, the organization owns the counter; otherwise the user does) and delegates to `RequireQuotaUseCase`. The use case calls `ensureActiveSubscription` to obtain or lazily create the scope's active subscription, looks up the plan's threshold for the named quota from the `PLAN_QUOTAS` code-level mapping in `entitlements.ts`, and issues a single atomic `INSERT … ON CONFLICT (user_id, org_id, quota_name, period_start) DO UPDATE SET count = usage_counters.count + 1 RETURNING count` against the `usage_counters` table. If the returned count exceeds `hard_limit` the use case throws `QuotaExceededError`; if the plan does not define the quota name the use case returns without touching the database (unlimited). Period rollover is natural: a new `current_period_start` does not match the existing unique-constraint key, causing the upsert to insert a fresh row.
 
-`ensureActiveSubscription` in `apps/services/src/modules/subscriptions/helpers/ensureActiveSubscription.ts` is a plain async helper (not a use case) shared between `RequireQuotaUseCase` and `GetMyQuotasUseCase`. When `findActiveOrWithinPeriodByScope` returns null it inserts a synthetic subscription with `plan_code = 'free'`, `status = 'active'`, and `current_period_start = date_trunc('month', now())`; a unique-constraint violation on the concurrent insert is caught and resolved by re-reading the now-existing row.
+`ensureActiveSubscription` in `apps/services/src/modules/subscriptions/helpers/ensureActiveSubscription.ts` is a plain async helper (not a use case) shared between `RequireQuotaUseCase` and `GetMyQuotasUseCase`. Its behavior is mode-aware: when `subscriptionsConfig.signupMode === 'freemium'` and `findActiveOrWithinPeriodByScope` returns null, it inserts a synthetic subscription with `plan_code = 'free'`, `status = 'active'`, and `current_period_start = date_trunc('month', now())`; a unique-constraint violation on the concurrent insert is caught and resolved by re-reading the now-existing row. When `signupMode === 'free_trial'` and no subscription is found, it returns `null` without creating any row. Callers must handle the `null` case, treating it as plan-less (no quotas enforced, no usage reported).
+
+### Active subscription preHandler
+
+`requireActiveSubscription` in `apps/services/src/modules/subscriptions/plugins/requireActiveSubscription.ts` is a **plain preHandler function** (not a factory — no parameter) registered as a global `onRequest` hook in `app.ts` after `clerkAuthPlugin`. It is a no-op when `subscriptionsConfig.signupMode === 'freemium'`. In `free_trial` mode it calls `transitionExpiredTrials` to lazily flip any expired trial, then checks for a non-expired subscription (`active`, `trialing`, `pending`, or `past_due`); if none exists it throws `TrialExpiredError` (HTTP 403, code `TRIAL_EXPIRED`, body `{ trialEndedAt }`). The hook is excluded for paths matching `/billing/*`, `/webhooks/*`, and `/health`. This is distinct from `requireEntitlement` and `requireQuota` (per-route factories) — `requireActiveSubscription` is applied globally once in `app.ts` and carries no parameters.
 
 ## Database client
 

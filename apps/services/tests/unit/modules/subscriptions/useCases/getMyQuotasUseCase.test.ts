@@ -1,6 +1,17 @@
+// Mock subscriptionsConfig — default to freemium for backward-compatible tests
+jest.mock('../../../../../src/shared/configs/subscriptionsConfig.js', () => ({
+  subscriptionsConfig: {
+    signupMode: 'freemium',
+    freeTrialDays: 14,
+    strictEntitlementsOnPastDue: false,
+  },
+}));
+
 import type { ISubscriptionRepository } from '../../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 import type { IUsageCounterRepository } from '../../../../../src/modules/subscriptions/repositories/interfaces/iUsageCounterRepository.js';
 import type { SubscriptionWithPlanEntity } from '../../../../../src/modules/subscriptions/entities/subscriptionWithPlanEntity.js';
+import type { SubscriptionEntity } from '../../../../../src/modules/subscriptions/entities/subscriptionEntity.js';
+import type { SubscriptionPlanEntity } from '../../../../../src/modules/subscriptions/entities/subscriptionPlanEntity.js';
 import { GetMyQuotasUseCase } from '../../../../../src/modules/subscriptions/useCases/getMyQuotasUseCase.js';
 
 const proSub: SubscriptionWithPlanEntity = {
@@ -15,9 +26,42 @@ const proSub: SubscriptionWithPlanEntity = {
   current_period_end: '2026-07-01T00:00:00.000Z',
   cancel_at_period_end: false,
   canceled_at: null,
+  trial_ends_at: null,
   created_at: '2026-06-01T00:00:00.000Z',
   updated_at: '2026-06-01T00:00:00.000Z',
   plan_code: 'pro',
+};
+
+const freePlan: SubscriptionPlanEntity = {
+  id: 'plan-free',
+  code: 'free',
+  name: 'Free',
+  description: 'Free plan',
+  price: 0,
+  currency: 'USD',
+  interval: 'month',
+  features: [],
+  is_active: true,
+  provider_plan_id: null,
+  created_at: '2026-06-01T00:00:00.000Z',
+  updated_at: '2026-06-01T00:00:00.000Z',
+};
+
+const createdFreeSub: SubscriptionEntity = {
+  id: 'sub-free',
+  user_id: 'user-001',
+  org_id: null,
+  plan_id: 'plan-free',
+  provider: 'internal',
+  provider_subscription_id: null,
+  status: 'active',
+  current_period_start: '2026-06-01T00:00:00.000Z',
+  current_period_end: '2026-07-01T00:00:00.000Z',
+  cancel_at_period_end: false,
+  canceled_at: null,
+  trial_ends_at: null,
+  created_at: '2026-06-01T00:00:00.000Z',
+  updated_at: '2026-06-01T00:00:00.000Z',
 };
 
 function makeSubscriptionRepo(sub: SubscriptionWithPlanEntity | null = proSub): ISubscriptionRepository {
@@ -25,8 +69,10 @@ function makeSubscriptionRepo(sub: SubscriptionWithPlanEntity | null = proSub): 
     findActiveByScopeStatus: jest.fn(),
     findByIdAndScope: jest.fn(),
     findActiveOrWithinPeriodByScope: jest.fn().mockResolvedValue(sub),
-    findPlanByCode: jest.fn(),
-    create: jest.fn(),
+    findPlanByCode: jest.fn().mockResolvedValue(freePlan),
+    findMostExpensiveActivePlan: jest.fn().mockResolvedValue(null),
+    transitionExpiredTrials: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue(createdFreeSub),
     setCancelAtPeriodEnd: jest.fn(),
     cancelImmediately: jest.fn(),
   };

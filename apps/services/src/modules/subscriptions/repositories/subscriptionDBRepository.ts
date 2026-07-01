@@ -18,7 +18,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         rows = await this.sql<SubscriptionEntity[]>`
           SELECT id, user_id, org_id, plan_id, provider, provider_subscription_id,
                  status, current_period_start, current_period_end, cancel_at_period_end,
-                 canceled_at, created_at, updated_at
+                 canceled_at, trial_ends_at, created_at, updated_at
           FROM subscriptions
           WHERE org_id = ${orgId}
             AND status NOT IN ('canceled', 'expired')
@@ -28,7 +28,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         rows = await this.sql<SubscriptionEntity[]>`
           SELECT id, user_id, org_id, plan_id, provider, provider_subscription_id,
                  status, current_period_start, current_period_end, cancel_at_period_end,
-                 canceled_at, created_at, updated_at
+                 canceled_at, trial_ends_at, created_at, updated_at
           FROM subscriptions
           WHERE user_id = ${userId}
             AND org_id IS NULL
@@ -58,7 +58,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         rows = await this.sql<SubscriptionEntity[]>`
           SELECT id, user_id, org_id, plan_id, provider, provider_subscription_id,
                  status, current_period_start, current_period_end, cancel_at_period_end,
-                 canceled_at, created_at, updated_at
+                 canceled_at, trial_ends_at, created_at, updated_at
           FROM subscriptions
           WHERE id = ${id}
             AND org_id = ${orgId}
@@ -68,7 +68,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         rows = await this.sql<SubscriptionEntity[]>`
           SELECT id, user_id, org_id, plan_id, provider, provider_subscription_id,
                  status, current_period_start, current_period_end, cancel_at_period_end,
-                 canceled_at, created_at, updated_at
+                 canceled_at, trial_ends_at, created_at, updated_at
           FROM subscriptions
           WHERE id = ${id}
             AND user_id = ${userId}
@@ -118,7 +118,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
       const rows = await this.sql<SubscriptionEntity[]>`
         INSERT INTO subscriptions (
           id, user_id, org_id, plan_id, provider, provider_subscription_id,
-          status, current_period_start, current_period_end
+          status, current_period_start, current_period_end, trial_ends_at
         ) VALUES (
           ${input.id},
           ${input.user_id},
@@ -128,11 +128,12 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
           ${input.provider_subscription_id},
           ${input.status},
           ${input.current_period_start},
-          ${input.current_period_end}
+          ${input.current_period_end},
+          ${input.trial_ends_at ?? null}
         )
         RETURNING id, user_id, org_id, plan_id, provider, provider_subscription_id,
                   status, current_period_start, current_period_end, cancel_at_period_end,
-                  canceled_at, created_at, updated_at
+                  canceled_at, trial_ends_at, created_at, updated_at
       `;
       logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.create');
       return rows[0];
@@ -146,6 +147,74 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
     }
   }
 
+  async findMostExpensiveActivePlan(): Promise<SubscriptionPlanEntity | null> {
+    const start = Date.now();
+    try {
+      const rows = await this.sql<SubscriptionPlanEntity[]>`
+        SELECT id, code, name, description, price, currency, interval, features,
+               is_active, provider_plan_id, created_at, updated_at
+        FROM subscription_plans
+        WHERE is_active = true
+          AND price > 0
+        ORDER BY price DESC
+        LIMIT 1
+      `;
+      logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.findMostExpensiveActivePlan');
+      return rows[0] ?? null;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'SubscriptionDBRepository', method: 'findMostExpensiveActivePlan' },
+        'SubscriptionDBRepository.findMostExpensiveActivePlan failed',
+      );
+      throw new ProviderError('Database error in SubscriptionDBRepository.findMostExpensiveActivePlan', 502, err);
+    }
+  }
+
+  async transitionExpiredTrials(userId: string, orgId: string | null): Promise<SubscriptionEntity | null> {
+    const start = Date.now();
+    try {
+      let rows: SubscriptionEntity[];
+
+      if (orgId !== null) {
+        rows = await this.sql<SubscriptionEntity[]>`
+          UPDATE subscriptions
+          SET status = 'expired',
+              updated_at = now()
+          WHERE status = 'trialing'
+            AND trial_ends_at < now()
+            AND org_id = ${orgId}
+          RETURNING id, user_id, org_id, plan_id, provider, provider_subscription_id,
+                    status, current_period_start, current_period_end, cancel_at_period_end,
+                    canceled_at, trial_ends_at, created_at, updated_at
+        `;
+      } else {
+        rows = await this.sql<SubscriptionEntity[]>`
+          UPDATE subscriptions
+          SET status = 'expired',
+              updated_at = now()
+          WHERE status = 'trialing'
+            AND trial_ends_at < now()
+            AND user_id = ${userId}
+            AND org_id IS NULL
+          RETURNING id, user_id, org_id, plan_id, provider, provider_subscription_id,
+                    status, current_period_start, current_period_end, cancel_at_period_end,
+                    canceled_at, trial_ends_at, created_at, updated_at
+        `;
+      }
+
+      logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.transitionExpiredTrials');
+      return rows[0] ?? null;
+    } catch (err: unknown) {
+      if (err instanceof DomainError) throw err;
+      logger.error(
+        { err, repository: 'SubscriptionDBRepository', method: 'transitionExpiredTrials' },
+        'SubscriptionDBRepository.transitionExpiredTrials failed',
+      );
+      throw new ProviderError('Database error in SubscriptionDBRepository.transitionExpiredTrials', 502, err);
+    }
+  }
+
   async setCancelAtPeriodEnd(id: string): Promise<SubscriptionEntity> {
     const start = Date.now();
     try {
@@ -156,7 +225,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         WHERE id = ${id}
         RETURNING id, user_id, org_id, plan_id, provider, provider_subscription_id,
                   status, current_period_start, current_period_end, cancel_at_period_end,
-                  canceled_at, created_at, updated_at
+                  canceled_at, trial_ends_at, created_at, updated_at
       `;
       logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.setCancelAtPeriodEnd');
       return rows[0];
@@ -180,7 +249,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
           SELECT s.id, s.user_id, s.org_id, s.plan_id, s.provider,
                  s.provider_subscription_id, s.status,
                  s.current_period_start, s.current_period_end,
-                 s.cancel_at_period_end, s.canceled_at, s.created_at, s.updated_at,
+                 s.cancel_at_period_end, s.canceled_at, s.trial_ends_at, s.created_at, s.updated_at,
                  sp.code AS plan_code
           FROM subscriptions s
           JOIN subscription_plans sp ON sp.id = s.plan_id
@@ -199,7 +268,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
           SELECT s.id, s.user_id, s.org_id, s.plan_id, s.provider,
                  s.provider_subscription_id, s.status,
                  s.current_period_start, s.current_period_end,
-                 s.cancel_at_period_end, s.canceled_at, s.created_at, s.updated_at,
+                 s.cancel_at_period_end, s.canceled_at, s.trial_ends_at, s.created_at, s.updated_at,
                  sp.code AS plan_code
           FROM subscriptions s
           JOIN subscription_plans sp ON sp.id = s.plan_id
@@ -239,7 +308,7 @@ export class SubscriptionDBRepository implements ISubscriptionRepository {
         WHERE id = ${id}
         RETURNING id, user_id, org_id, plan_id, provider, provider_subscription_id,
                   status, current_period_start, current_period_end, cancel_at_period_end,
-                  canceled_at, created_at, updated_at
+                  canceled_at, trial_ends_at, created_at, updated_at
       `;
       logger.info({ duration: Date.now() - start }, 'SubscriptionDBRepository.cancelImmediately');
       return rows[0];

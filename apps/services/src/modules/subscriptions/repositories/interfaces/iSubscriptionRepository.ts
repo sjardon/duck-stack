@@ -9,9 +9,10 @@ export interface CreateSubscriptionData {
   plan_id: string;
   provider: string;
   provider_subscription_id: string | null;
-  status: 'pending' | 'active';
+  status: 'pending' | 'active' | 'trialing';
   current_period_start: string | null;
   current_period_end: string | null;
+  trial_ends_at?: string | null;
 }
 
 export interface ISubscriptionRepository {
@@ -19,6 +20,8 @@ export interface ISubscriptionRepository {
   findByIdAndScope(id: string, userId: string, orgId: string | null): Promise<SubscriptionEntity | null>;
   findActiveOrWithinPeriodByScope(userId: string, orgId: string | null): Promise<SubscriptionWithPlanEntity | null>;
   findPlanByCode(planCode: string): Promise<SubscriptionPlanEntity | null>;
+  findMostExpensiveActivePlan(): Promise<SubscriptionPlanEntity | null>;
+  transitionExpiredTrials(userId: string, orgId: string | null): Promise<SubscriptionEntity | null>;
   create(input: CreateSubscriptionData): Promise<SubscriptionEntity>;
   setCancelAtPeriodEnd(id: string): Promise<SubscriptionEntity>;
   cancelImmediately(id: string): Promise<SubscriptionEntity>;

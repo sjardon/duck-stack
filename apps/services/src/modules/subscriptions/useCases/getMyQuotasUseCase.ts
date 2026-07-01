@@ -2,6 +2,7 @@ import type { QuotaUsage, QuotaState } from '@repo/types';
 import type { ISubscriptionRepository } from '../repositories/interfaces/iSubscriptionRepository.js';
 import type { IUsageCounterRepository } from '../repositories/interfaces/iUsageCounterRepository.js';
 import { PLAN_QUOTAS } from '../entitlements.js';
+import { ensureActiveSubscription } from '../helpers/ensureActiveSubscription.js';
 
 export class GetMyQuotasUseCase {
   constructor(
@@ -10,25 +11,14 @@ export class GetMyQuotasUseCase {
   ) {}
 
   async execute(userId: string, orgId: string | null): Promise<QuotaUsage[]> {
-    const sub = await this.subscriptionRepo.findActiveOrWithinPeriodByScope(userId, orgId);
+    const sub = await ensureActiveSubscription(this.subscriptionRepo, userId, orgId);
 
-    let planCode: string;
-    let periodStart: string;
-    let periodEnd: string;
+    // R009: in free_trial mode with no subscription, return empty quotas
+    if (!sub) return [];
 
-    if (sub) {
-      planCode = sub.plan_code;
-      periodStart = sub.current_period_start!;
-      periodEnd = sub.current_period_end!;
-    } else {
-      // No active subscription: fall back to free plan with a synthetic monthly period
-      planCode = 'free';
-      const now = new Date();
-      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-      periodStart = start.toISOString();
-      periodEnd = end.toISOString();
-    }
+    const planCode = sub.plan_code;
+    const periodStart = sub.current_period_start!;
+    const periodEnd = sub.current_period_end!;
 
     const planQuotas = PLAN_QUOTAS[planCode];
     if (!planQuotas || Object.keys(planQuotas).length === 0) return [];

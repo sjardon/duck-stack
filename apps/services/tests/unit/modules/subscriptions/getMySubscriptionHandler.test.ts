@@ -26,6 +26,7 @@ const activeSubscription: SubscriptionEntity = {
   current_period_end: null,
   cancel_at_period_end: false,
   canceled_at: null,
+  trial_ends_at: null,
   created_at: '2026-06-24T00:00:00.000Z',
   updated_at: '2026-06-24T00:00:00.000Z',
 };

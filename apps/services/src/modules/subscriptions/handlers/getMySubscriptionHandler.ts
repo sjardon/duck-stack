@@ -12,5 +12,7 @@ export async function getMySubscriptionHandler(
 
   const subscription = await useCase.execute(request.userId!, request.orgId ?? null);
 
+  // R010: trial_ends_at and days_remaining are already present on the entity
+  // when status === 'trialing'; pass them through as-is
   return reply.send({ subscription });
 }
