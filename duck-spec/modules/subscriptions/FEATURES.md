@@ -349,7 +349,7 @@ Trackear el uso por scope (`user_id` u `org_id`) de cuotas nombradas contra los 
 
 ## SUBS-007 — Quota UI Gates (frontend)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
