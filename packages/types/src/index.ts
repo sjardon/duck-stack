@@ -105,7 +105,8 @@ export type SubscriptionStatusValue =
   | 'active'
   | 'past_due'
   | 'canceled'
-  | 'expired';
+  | 'expired'
+  | 'trialing';
 
 export interface Subscription {
   id: string;
@@ -119,6 +120,8 @@ export interface Subscription {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   canceled_at: string | null;
+  trial_ends_at: string | null;
+  days_remaining?: number;
   created_at: string;
   updated_at: string;
 }

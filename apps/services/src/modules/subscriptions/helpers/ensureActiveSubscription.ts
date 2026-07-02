@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { ISubscriptionRepository } from '../repositories/interfaces/iSubscriptionRepository.js';
 import type { SubscriptionWithPlanEntity } from '../entities/subscriptionWithPlanEntity.js';
 import { NotFoundError } from '../../../shared/errors.js';
+import { subscriptionsConfig } from '../../../shared/configs/subscriptionsConfig.js';
 
 /**
  * Postgres error code for unique constraint violations.
@@ -21,8 +22,14 @@ export async function ensureActiveSubscription(
   repo: ISubscriptionRepository,
   userId: string,
   orgId: string | null,
-): Promise<SubscriptionWithPlanEntity> {
+): Promise<SubscriptionWithPlanEntity | null> {
   const existing = await repo.findActiveOrWithinPeriodByScope(userId, orgId);
+
+  // R009: in free_trial mode, skip free-plan creation and return existing or null
+  if (subscriptionsConfig.signupMode === 'free_trial') {
+    return existing ?? null;
+  }
+
   if (existing) return existing;
 
   const freePlan = await repo.findPlanByCode('free');

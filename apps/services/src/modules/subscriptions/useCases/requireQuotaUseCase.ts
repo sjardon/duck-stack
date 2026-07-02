@@ -13,6 +13,9 @@ export class RequireQuotaUseCase {
   async execute(userId: string, orgId: string | null, quotaName: string): Promise<void> {
     const sub = await ensureActiveSubscription(this.subscriptionRepo, userId, orgId);
 
+    // R009: in free_trial mode with no subscription, treat as unlimited (no quota enforcement)
+    if (!sub) return;
+
     const planQuotas = PLAN_QUOTAS[sub.plan_code];
     const thresholds = planQuotas?.[quotaName];
 

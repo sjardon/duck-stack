@@ -22,7 +22,7 @@ The backend module follows the standard `handler → useCase → IRepository →
 
 ## Subscribe & cancel flow (SUBS-002)
 
-The module persists user and organization subscriptions in the Supabase table `subscriptions`. The table has columns `id` (uuid PK), `user_id` (FK → users, nullable), `org_id` (FK → organizations, nullable), `plan_id` (FK → subscription_plans), `provider` (text), `provider_subscription_id` (text nullable), `status` (text, `CHECK` constrained to `pending` | `active` | `past_due` | `canceled` | `expired`), `current_period_start` (timestamptz nullable), `current_period_end` (timestamptz nullable), `cancel_at_period_end` (boolean, default `false`), `canceled_at` (timestamptz nullable), `created_at`, and `updated_at`. Two partial unique indexes enforce that at most one subscription with `status NOT IN ('canceled', 'expired')` exists per scope: `subscriptions_active_per_user` on `user_id` and `subscriptions_active_per_org` on `org_id`.
+The module persists user and organization subscriptions in the Supabase table `subscriptions`. The table has columns `id` (uuid PK), `user_id` (FK → users, nullable), `org_id` (FK → organizations, nullable), `plan_id` (FK → subscription_plans), `provider` (text), `provider_subscription_id` (text nullable), `status` (text, `CHECK` constrained to `pending` | `active` | `past_due` | `canceled` | `expired` | `trialing`), `current_period_start` (timestamptz nullable), `current_period_end` (timestamptz nullable), `trial_ends_at` (timestamptz nullable), `cancel_at_period_end` (boolean, default `false`), `canceled_at` (timestamptz nullable), `created_at`, and `updated_at`. Two partial unique indexes enforce that at most one subscription with `status NOT IN ('canceled', 'expired')` exists per scope: `subscriptions_active_per_user` on `user_id` and `subscriptions_active_per_org` on `org_id`.
 
 Three protected endpoints handle the subscribe/cancel lifecycle, all guarded by `requireAuth`:
 
@@ -80,3 +80,21 @@ The frontend exposes quota state to React component trees via two primitives in 
 | `normal` (including loading) | `children` only |
 
 The upgrade CTA is resolved by composing `usePlans()` and `useMySubscription()`. The next plan is the first plan in the catalog (sorted by `price` ascending) whose `price` exceeds `currentPlan.price`. When no such plan exists — either because the user is already on the highest-priced plan or because the user's plan has been removed from the catalog with no higher-priced successor — the CTA is replaced with the informational message "You are on our highest plan — contact us for custom limits". No upgrade CTA is rendered at all when `state` is `'normal'`.
+
+---
+
+## Free Trial Mode (SUBS-008)
+
+The module supports two mutually exclusive signup models, selected by the `SIGNUP_MODE` environment variable (`freemium` | `free_trial`, defaulting to `freemium`). The trial duration in `free_trial` mode is controlled by `FREE_TRIAL_DAYS` (integer, defaulting to `14`). Both config keys are read exclusively in `subscriptionsConfig.ts`.
+
+In `free_trial` mode, the Clerk `user.created` webhook handler creates a `trialing` subscription for the new user with `plan_id` set to the active plan with the highest `price` (resolved at runtime without caching), `trial_ends_at = now() + FREE_TRIAL_DAYS days`, and `current_period_end = trial_ends_at`. In `freemium` mode the webhook handler does not create any subscription; the existing SUBS-006 lazy-creation path remains unchanged.
+
+`CreateTrialSubscriptionUseCase` in `apps/services/src/modules/subscriptions/useCases/createTrialSubscriptionUseCase.ts` owns this creation logic. Idempotency on Clerk webhook retries is guaranteed by the SUBS-002 partial unique index: a concurrent or duplicate `user.created` event triggers a PG 23505 violation, which the use case catches and discards silently. If no active plan with `price > 0` exists at webhook time the use case logs an error and returns without creating a subscription.
+
+The lazy `trialing → expired` transition is handled by `transitionExpiredTrials(userId, orgId)` on `SubscriptionDBRepository`. The method issues an atomic `UPDATE WHERE status = 'trialing' AND trial_ends_at < now()`, making the transition safe under concurrency. It is called by `requireActiveSubscription` and by `GetMySubscriptionUseCase` before any read that may expose subscription status to a consumer.
+
+`requireActiveSubscription` in `apps/services/src/modules/subscriptions/plugins/requireActiveSubscription.ts` is a plain `preHandler` function (not a factory) registered as a global `onRequest` hook in `app.ts` after `clerkAuthPlugin`. It is a no-op when `signupMode === 'freemium'`. In `free_trial` mode it calls `transitionExpiredTrials`, then checks for an `active`, `trialing`, `pending`, or `past_due` subscription. When none exists it throws `TrialExpiredError` (HTTP 403, code `TRIAL_EXPIRED`, body `{ trialEndedAt }`). The hook is excluded for all paths matching `/billing/*`, `/webhooks/*`, and `/health`, allowing expired-trial users to reach billing routes and select a plan.
+
+In `free_trial` mode, `ensureActiveSubscription` returns `null` instead of lazily creating a `free` subscription when no subscription is found. `RequireQuotaUseCase` and `GetMyQuotasUseCase` handle the `null` case by treating the scope as plan-less (no quotas enforced, no usage reported).
+
+`GET /billing/subscriptions/me` includes `trial_ends_at` and `days_remaining` (integer whole days from `now()` to `trial_ends_at`, minimum `0`) in its response when the current subscription's `status === 'trialing'`. The `SubscriptionStatusValue` type in `@repo/types` includes `trialing`, and `Subscription` carries optional `trial_ends_at: string | null` and `days_remaining?: number` fields.

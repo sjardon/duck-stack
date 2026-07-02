@@ -46,6 +46,12 @@ export class ProviderError extends DomainError {
   }
 }
 
+export class TrialExpiredError extends DomainError {
+  constructor(public readonly trialEndedAt: string) {
+    super('TRIAL_EXPIRED', 'Your trial has expired. Please select a plan to continue.', 403);
+  }
+}
+
 export class QuotaExceededError extends DomainError {
   constructor(
     public readonly quotaName: string,

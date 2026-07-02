@@ -7,6 +7,7 @@ import {
   ProviderError,
   EntitlementRequiredError,
   QuotaExceededError,
+  TrialExpiredError,
 } from '../../../src/shared/errors.js';
 
 // T001 — R001, R003: DomainError stores originalError
@@ -155,6 +156,28 @@ describe('QuotaExceededError — construction (R004)', () => {
 
   it('WHEN constructed THEN message contains the quota name', () => {
     expect(err.message).toContain('api_requests');
+  });
+});
+
+// T007 — R007: TrialExpiredError shape
+describe('TrialExpiredError — construction (R007)', () => {
+  const trialEndedAt = '2026-08-01T00:00:00Z';
+  const err = new TrialExpiredError(trialEndedAt);
+
+  it('WHEN constructed THEN statusCode is 403', () => {
+    expect(err.statusCode).toBe(403);
+  });
+
+  it('WHEN constructed THEN code is TRIAL_EXPIRED', () => {
+    expect(err.code).toBe('TRIAL_EXPIRED');
+  });
+
+  it('WHEN constructed THEN trialEndedAt equals the provided value', () => {
+    expect(err.trialEndedAt).toBe(trialEndedAt);
+  });
+
+  it('WHEN constructed THEN it is an instance of DomainError', () => {
+    expect(err).toBeInstanceOf(DomainError);
   });
 });
 

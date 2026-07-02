@@ -39,6 +39,23 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+// T020 — R004: upsertUser returns internal UUID
+describe('ClerkSyncRepository.upsertUser — returns internal UUID (R004)', () => {
+  it('WHEN upsertUser is called THEN it returns { id: string } containing the internal UUID', async () => {
+    const { sql } = makeSqlMock([{ id: 'internal-uuid-001' }]);
+    const repo = new ClerkSyncRepository(sql as never);
+
+    const result = await repo.upsertUser({
+      clerkUserId: 'clerk-001',
+      email: 'a@b.com',
+      name: 'Alice',
+      avatarUrl: null,
+    });
+
+    expect(result).toEqual({ id: 'internal-uuid-001' });
+  });
+});
+
 // T009 — upsertUser error path
 
 describe('ClerkSyncRepository.upsertUser — SQL error path (R001, R002, R007, NF001, NF002, NF003)', () => {

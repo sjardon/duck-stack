@@ -411,7 +411,7 @@ Exponer el estado de quotas a los componentes de React mediante un hook y un com
 
 ## SUBS-008 — Free Trial Mode (backend)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

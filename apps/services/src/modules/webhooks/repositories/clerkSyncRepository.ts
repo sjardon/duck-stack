@@ -24,17 +24,19 @@ export interface CreateMembershipData {
 export class ClerkSyncRepository {
   constructor(private readonly sql: Sql) {}
 
-  async upsertUser(data: UpsertUserData): Promise<void> {
+  async upsertUser(data: UpsertUserData): Promise<{ id: string }> {
     const start = Date.now();
     try {
-      await this.sql`
+      const rows = await this.sql<Array<{ id: string }>>`
         INSERT INTO users (clerk_user_id, email, name, avatar_url)
         VALUES (${data.clerkUserId}, ${data.email}, ${data.name}, ${data.avatarUrl})
         ON CONFLICT (clerk_user_id) DO UPDATE
           SET email = EXCLUDED.email,
               name = EXCLUDED.name,
-              avatar_url = EXCLUDED.avatar_url`;
+              avatar_url = EXCLUDED.avatar_url
+        RETURNING id`;
       logger.info({ duration: Date.now() - start }, 'ClerkSyncRepository.upsertUser');
+      return rows[0];
     } catch (err: unknown) {
       if (err instanceof DomainError) throw err;
       logger.error(
