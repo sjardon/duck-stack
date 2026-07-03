@@ -7,6 +7,7 @@ jest.mock('../../../../../src/shared/configs/subscriptionsConfig.js', () => ({
   },
 }));
 
+
 import type { ISubscriptionRepository } from '../../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 import type { IUsageCounterRepository } from '../../../../../src/modules/subscriptions/repositories/interfaces/iUsageCounterRepository.js';
 import type { SubscriptionWithPlanEntity } from '../../../../../src/modules/subscriptions/entities/subscriptionWithPlanEntity.js';
@@ -81,6 +82,8 @@ function makeSubscriptionRepo(sub: SubscriptionWithPlanEntity | null = proSub): 
 function makeCounterRepo(countReturn = 0): IUsageCounterRepository {
   return {
     incrementAndReturn: jest.fn(),
+    incrementByAndReturn: jest.fn(),
+    adjustCount: jest.fn(),
     findCount: jest.fn().mockResolvedValue(countReturn),
   };
 }
@@ -197,5 +200,34 @@ describe('GetMyQuotasUseCase — org scope (R008, EC005)', () => {
       'api_requests',
       orgSub.current_period_start,
     );
+  });
+});
+
+// T018 — R010
+describe('GetMyQuotasUseCase — unit field in QuotaUsage (R010)', () => {
+  it('WHEN execute resolves THEN each item in the returned array has a unit field', async () => {
+    const subRepo = makeSubscriptionRepo(proSub);
+    const counterRepo = makeCounterRepo(10);
+    const useCase = new GetMyQuotasUseCase(subRepo, counterRepo);
+
+    const result = await useCase.execute('user-001', null);
+
+    expect(result.length).toBeGreaterThan(0);
+    for (const quota of result) {
+      expect(quota).toHaveProperty('unit');
+      expect(typeof quota.unit).toBe('string');
+    }
+  });
+
+  it('WHEN the quota is api_requests THEN unit is "request"', async () => {
+    const subRepo = makeSubscriptionRepo(proSub);
+    const counterRepo = makeCounterRepo(10);
+    const useCase = new GetMyQuotasUseCase(subRepo, counterRepo);
+
+    const result = await useCase.execute('user-001', null);
+
+    const apiRequestsQuota = result.find((q) => q.name === 'api_requests');
+    expect(apiRequestsQuota).toBeDefined();
+    expect(apiRequestsQuota!.unit).toBe('request');
   });
 });

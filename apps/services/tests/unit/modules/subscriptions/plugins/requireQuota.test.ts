@@ -50,7 +50,37 @@ describe('requireQuota preHandler — allow path (R003, R005, R006)', () => {
 
     await requireQuota('api_requests')(request);
 
-    expect(mockExecute).toHaveBeenCalledWith('user-001', 'org-001', 'api_requests');
+    expect(mockExecute).toHaveBeenCalledWith('user-001', 'org-001', 'api_requests', request);
+  });
+});
+
+// T012 — R003, R004, EC001, EC002
+describe('requireQuota preHandler — passes request to use case (R003, R004)', () => {
+  it('WHEN requireQuota preHandler is invoked THEN useCase.execute is called with four arguments (userId, orgId, quotaName, request)', async () => {
+    mockExecute.mockResolvedValue(undefined);
+    const request = makeRequest('user-001', null);
+
+    await requireQuota('api_requests')(request);
+
+    expect(mockExecute).toHaveBeenCalledWith('user-001', null, 'api_requests', request);
+    expect(mockExecute.mock.calls[0]).toHaveLength(4);
+  });
+
+  it('WHEN the use case decorates request.quotaReservations THEN the field is readable on the same request object (R004)', async () => {
+    mockExecute.mockImplementation((_userId: unknown, _orgId: unknown, _name: unknown, req: unknown) => {
+      (req as Record<string, unknown>).quotaReservations = {
+        api_requests: { reserved: 5, charged: 5, rowKey: { userId: 'user-001', orgId: null, periodStart: '2026-06-01T00:00:00.000Z' } },
+      };
+      return Promise.resolve(undefined);
+    });
+    const request = makeRequest();
+
+    await requireQuota('api_requests')(request);
+
+    const reservations = (request as unknown as Record<string, unknown>).quotaReservations as Record<string, { reserved: number; charged: number }>;
+    expect(reservations).toBeDefined();
+    expect(reservations['api_requests']!.reserved).toBe(5);
+    expect(reservations['api_requests']!.charged).toBe(5);
   });
 });
 

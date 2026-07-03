@@ -128,6 +128,99 @@ describe('UsageCounterDBRepository.findCount — current count retrieval (R002)'
   });
 });
 
+// T004 — R003, R005, NF001, NF002, NF003
+describe('UsageCounterDBRepository.incrementByAndReturn — atomic upsert with cost (R003, NF002)', () => {
+  it('WHEN called with cost 5 THEN the SQL upsert adds 5 to count and returns the new value', async () => {
+    const { sql } = makeSqlMock([{ count: 5 }]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    const result = await repo.incrementByAndReturn('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 5);
+
+    expect(result).toBe(5);
+  });
+
+  it('WHEN called on an existing row with cost 3 THEN returns previous count + 3', async () => {
+    const { sql } = makeSqlMock([{ count: 45 }]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    const result = await repo.incrementByAndReturn('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 3);
+
+    expect(result).toBe(45);
+  });
+
+  it('WHEN called THEN issues exactly one SQL call (atomic upsert — NF002)', async () => {
+    const { sql, mockFn } = makeSqlMock([{ count: 5 }]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await repo.incrementByAndReturn('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 5);
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('WHEN sql rejects THEN logger.error is called and ProviderError is thrown', async () => {
+    const rawError = new Error('db error');
+    const { sql } = makeRejectingSqlMock(rawError);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await expect(
+      repo.incrementByAndReturn('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 5),
+    ).rejects.toBeInstanceOf(ProviderError);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'UsageCounterDBRepository',
+        method: 'incrementByAndReturn',
+      }),
+      expect.any(String),
+    );
+  });
+});
+
+describe('UsageCounterDBRepository.adjustCount — atomic UPDATE with delta (R005, NF001, NF003)', () => {
+  it('WHEN called with delta -3 THEN issues a single SQL UPDATE (no prior SELECT — NF001)', async () => {
+    const { sql, mockFn } = makeSqlMock([]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await repo.adjustCount('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', -3);
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('WHEN called with positive delta THEN issues a single SQL UPDATE', async () => {
+    const { sql, mockFn } = makeSqlMock([]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await repo.adjustCount('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 10);
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('WHEN delta is 0 THEN no SQL query is issued', async () => {
+    const { sql, mockFn } = makeSqlMock([]);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await repo.adjustCount('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 0);
+
+    expect(mockFn).not.toHaveBeenCalled();
+  });
+
+  it('WHEN sql rejects THEN logger.error is called and ProviderError is thrown', async () => {
+    const rawError = new Error('db error');
+    const { sql } = makeRejectingSqlMock(rawError);
+    const repo = new UsageCounterDBRepository(sql as never);
+
+    await expect(
+      repo.adjustCount('user-001', null, 'api_requests', '2026-06-01T00:00:00.000Z', 5),
+    ).rejects.toBeInstanceOf(ProviderError);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'UsageCounterDBRepository',
+        method: 'adjustCount',
+      }),
+      expect.any(String),
+    );
+  });
+});
+
 // T031 — R011 natural period rollover
 describe('UsageCounterDBRepository.incrementAndReturn — natural period rollover (R011)', () => {
   it('WHEN called with a different periodStart THEN inserts a new row (count = 1)', async () => {
