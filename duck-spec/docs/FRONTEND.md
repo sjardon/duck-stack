@@ -51,7 +51,7 @@ Import direction is enforced by convention: `api` → `hooks` → `pages` → `c
 
 ## `api/client.ts` pattern
 
-All HTTP calls from `apps/web` go through `apiFetch<T>(path, options?)` in `api/client.ts`. The function resolves the base URL from `VITE_API_URL` and attaches an `Authorization: Bearer` header when `options.token` is supplied. When no token is present the header is omitted rather than throwing, so the client is usable before auth is implemented. Non-2xx responses throw a typed `ApiError` (message + status).
+All HTTP calls from `apps/web` go through `apiFetch<T>(path, options?)` in `api/client.ts`. The function resolves the base URL from `VITE_API_URL` and attaches an `Authorization: Bearer` header when `options.token` is supplied. When no token is present the header is omitted rather than throwing, so the client is usable before auth is implemented. Non-2xx responses throw a typed `ApiError` (message + status). As a global side-effect, when a 403 response body contains `code: 'TRIAL_EXPIRED'`, `apiFetch` calls `window.location.replace('/trial-expired')` before throwing — this provides immediate redirect coverage for expired-trial users before the React Query cache observes the state change.
 
 Individual endpoint modules call `apiFetch` and are in turn consumed only by hooks — never by components or pages directly. Domain modules that require an auth token pass it explicitly as the first argument (e.g. `createCheckout(token, body)`). `api/billing.ts` exports `createCheckout`, `getTransaction`, and `listTransactions`, each accepting a bearer token and returning typed responses using `@repo/types` (`Transaction`, `TransactionListResponse`).
 
@@ -61,12 +61,13 @@ Individual endpoint modules call `apiFetch` and are in turn consumed only by hoo
 
 ### AuthGuard
 
-`components/auth/AuthGuard.tsx` is a layout route component used in the router to gate protected sections. It enforces two sequential conditions before rendering `<Outlet />`:
+`components/auth/AuthGuard.tsx` is a layout route component used in the router to gate protected sections. It enforces three sequential conditions before rendering `<Outlet />`:
 
 1. **Authentication** — reads `useAuth().isSignedIn` from `@clerk/clerk-react`. While Clerk is initialising it renders a loading state. When `isSignedIn` is false it navigates to `/sign-in` with `replace`.
 2. **Onboarding completion** — calls `useUserProfile()` to read `onboarding_completed`. While the profile is loading or has errored it holds in a neutral loading state without redirecting. Once loaded, if `onboarding_completed` is `false` and the current path is not `/onboarding` it renders `<Navigate to="/onboarding" replace />` before any protected page is mounted (satisfying the pre-render redirect requirement). If `onboarding_completed` is `true` and the current path is `/onboarding` it redirects to `/` instead.
+3. **Trial expiry** — calls `useTrialStatus()` unconditionally. While the query is loading it holds in a neutral loading state. When `isExpired === true` and the current path is not in `['/pricing', '/billing', '/billing/subscribe', '/trial-expired']`, it renders `<Navigate to="/trial-expired" replace />`. Whitelisted paths render `<Outlet />` unchanged.
 
-Individual page components must not duplicate the onboarding gating check — that logic lives exclusively in `AuthGuard`.
+Individual page components must not duplicate any of these gating checks — all redirect logic lives exclusively in `AuthGuard`.
 
 ### Auth-related hooks
 
@@ -107,7 +108,7 @@ The page is wrapped by `AuthGuard`. It renders a welcome message and a form with
 
 ### AppLayout
 
-`components/layout/AppLayout.tsx` is the authenticated layout shell. It renders `<UserButton />` from `@clerk/clerk-react` in the header, providing in-place sign-out and account management for every authenticated page.
+`components/layout/AppLayout.tsx` is the authenticated layout shell. It renders `<UserButton />` from `@clerk/clerk-react` in the header, providing in-place sign-out and account management for every authenticated page. `<TrialBanner />` is mounted above the header element; it uses fixed positioning and renders conditionally, so it does not reflow the page body.
 
 ## Store structure
 
@@ -185,6 +186,34 @@ Defined in `apps/web/src/components/domain/billing/QuotaGate.tsx`. Calls `useQuo
 | `normal` (including while loading) | `children` only |
 
 The upgrade CTA is resolved by composing `usePlans()` and `useMySubscription()`. The next plan is the first entry in the catalog (sorted by `price` ascending) with `price > currentPlan.price`. When the user is already on the highest-priced plan, or the user's plan has been removed from the catalog with no higher-priced successor, the CTA is replaced with "You are on our highest plan — contact us for custom limits". No CTA is rendered when `state` is `'normal'`. The domain-component-calls-hook pattern is an established convention in the billing domain (also used by `<EntitlementGate>`) and is an intentional exception to the strict unidirectional import rule.
+
+## Trial gating
+
+`apps/web` surfaces free-trial state through a hook, a banner component, and a dedicated page. All three share a single React Query cache entry with `useMySubscription`.
+
+### `useTrialStatus()`
+
+Defined in `apps/web/src/hooks/useTrialStatus.ts`. Issues a React Query call under `queryKey: ['billing', 'subscriptions', 'me']` — the same key used by `useMySubscription` — so both hooks share one cache entry and at most one network request is issued per stale window. Configuration: `staleTime: 60_000`, `refetchOnWindowFocus: true`. Returns:
+
+| Field | Type | Value while loading |
+|---|---|---|
+| `isTrialing` | `boolean` | `false` |
+| `daysRemaining` | `number \| null` | `null` |
+| `trialEndsAt` | `string \| null` | `null` |
+| `isExpired` | `boolean` | `false` |
+| `isLoading` | `boolean` | `true` |
+
+All derivation is a pure mapping of the `Subscription` response fields — no local date arithmetic is applied. The safe loading defaults ensure `AuthGuard` does not redirect prematurely before the first response arrives.
+
+`useInvalidateMySubscription()` is also exported from the same file. It returns a function that calls `queryClient.invalidateQueries({ queryKey: ['billing', 'subscriptions', 'me'] })`. The `/trial-expired` page calls it in the `onSuccess` handler of the "Continue with free" mutation so `isExpired` re-derives to `false` before the navigation to `/`.
+
+### `<TrialBanner />`
+
+Defined in `apps/web/src/components/domain/billing/TrialBanner.tsx`. Calls `useTrialStatus()` directly (billing-domain exception to the strict import rule, consistent with `<QuotaGate />` and `<EntitlementGate />`). Renders a fixed-position top bar only when `isTrialing === true && daysRemaining !== null && daysRemaining <= 3`. When `daysRemaining === 0` it renders "Less than 1 day left in your trial — upgrade now" rather than "0 days left". The CTA links to `/pricing`. Returns `null` in all other cases.
+
+### `/trial-expired` page
+
+`pages/TrialExpired.tsx` renders the plan catalog using `<PlanCard />` from SUBS-004 and a "Continue with free" button when `plans.some(p => p.code === 'free')`. On successful subscription it calls `useInvalidateMySubscription()` then navigates to `/`. The route is placed inside `AuthGuard` but outside the `AppLayout` subtree in the router so the banner does not render during the expired state.
 
 ## Shared domain types
 

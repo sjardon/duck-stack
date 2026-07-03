@@ -13,11 +13,18 @@ vi.mock('../src/hooks/use-user-profile', () => ({
   useUserProfile: vi.fn(),
 }));
 
+// Mock useTrialStatus so AuthGuard does not need a QueryClient
+vi.mock('../src/hooks/useTrialStatus', () => ({
+  useTrialStatus: vi.fn(),
+}));
+
 import { useAuth } from '@clerk/clerk-react';
 import { useUserProfile } from '../src/hooks/use-user-profile';
+import { useTrialStatus } from '../src/hooks/useTrialStatus';
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockUseUserProfile = useUserProfile as ReturnType<typeof vi.fn>;
+const mockUseTrialStatus = useTrialStatus as ReturnType<typeof vi.fn>;
 
 function renderWithRouter(initialPath: string) {
   return render(
@@ -38,6 +45,14 @@ function renderWithRouter(initialPath: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: trial not loading, not expired — neutral state
+  mockUseTrialStatus.mockReturnValue({
+    isTrialing: false,
+    isExpired: false,
+    daysRemaining: null,
+    trialEndsAt: null,
+    isLoading: false,
+  });
 });
 
 describe('AuthGuard — onboarding redirect logic', () => {

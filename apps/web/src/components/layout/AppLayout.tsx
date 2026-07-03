@@ -1,9 +1,11 @@
 import { UserButton } from "@clerk/clerk-react";
 import { Outlet } from "react-router-dom";
+import TrialBanner from "../domain/billing/TrialBanner";
 
 export default function AppLayout() {
   return (
     <div>
+      <TrialBanner />
       <header
         style={{
           display: "flex",
