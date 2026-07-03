@@ -1,7 +1,7 @@
 import type { QuotaUsage, QuotaState } from '@repo/types';
 import type { ISubscriptionRepository } from '../repositories/interfaces/iSubscriptionRepository.js';
 import type { IUsageCounterRepository } from '../repositories/interfaces/iUsageCounterRepository.js';
-import { PLAN_QUOTAS } from '../entitlements.js';
+import { PLAN_QUOTAS, resolveStrategy } from '../entitlements.js';
 import { ensureActiveSubscription } from '../helpers/ensureActiveSubscription.js';
 
 export class GetMyQuotasUseCase {
@@ -55,6 +55,7 @@ export class GetMyQuotasUseCase {
         period_start: periodStart,
         period_end: periodEnd,
         state,
+        unit: resolveStrategy(quotaName).unit,
       });
     }
 

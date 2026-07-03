@@ -15,6 +15,7 @@ import { resolveProvider } from './modules/billing/providers/resolveProvider.js'
 import { serverConfig } from './shared/configs/serverConfig.js';
 import { requestContext } from './shared/infrastructure/requestContext.js';
 import { requireActiveSubscription } from './modules/subscriptions/plugins/requireActiveSubscription.js';
+import requireQuotaPlugin from './modules/subscriptions/plugins/requireQuota.js';
 
 export async function createApp(): Promise<FastifyInstance> {
   // Fail fast on misconfigured payment provider before the HTTP server starts
@@ -54,6 +55,7 @@ export async function createApp(): Promise<FastifyInstance> {
     await requireActiveSubscription(request);
   });
 
+  await fastify.register(requireQuotaPlugin);
   await fastify.register(usersRoutes);
   await fastify.register(billingRoutes);
   await fastify.register(subscriptionsRoutes);

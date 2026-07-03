@@ -162,6 +162,16 @@ export interface QuotaThresholds {
 
 export type QuotaState = 'normal' | 'soft_exceeded' | 'hard_exceeded';
 
+export type QuotaMode = 'pre' | 'post';
+
+export type QuotaUnit = string;
+
+export interface QuotaStrategy {
+  unit: QuotaUnit;
+  mode: QuotaMode;
+  compute: (req: unknown) => number;
+}
+
 export interface QuotaUsage {
   name: QuotaName;
   count: number;
@@ -170,6 +180,7 @@ export interface QuotaUsage {
   period_start: string;
   period_end: string;
   state: QuotaState;
+  unit: string;
 }
 
 export interface QuotasResponse {

@@ -52,6 +52,12 @@ export class TrialExpiredError extends DomainError {
   }
 }
 
+export class ProgrammingError extends DomainError {
+  constructor(message: string) {
+    super('PROGRAMMING_ERROR', message, 500);
+  }
+}
+
 export class QuotaExceededError extends DomainError {
   constructor(
     public readonly quotaName: string,

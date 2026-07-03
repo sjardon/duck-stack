@@ -542,7 +542,7 @@ Exponer el estado del trial en la app autenticada mediante un banner de urgencia
 
 ## SUBS-010 — Variable-Cost Quota Strategies (backend)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

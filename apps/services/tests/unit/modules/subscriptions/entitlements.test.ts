@@ -1,4 +1,4 @@
-import { PLAN_ENTITLEMENTS, PLAN_QUOTAS } from '../../../../src/modules/subscriptions/entitlements.js';
+import { PLAN_ENTITLEMENTS, PLAN_QUOTAS, resolveStrategy, DEFAULT_QUOTA_STRATEGY } from '../../../../src/modules/subscriptions/entitlements.js';
 
 describe('PLAN_ENTITLEMENTS — mapping coverage (R001)', () => {
   it('WHEN PLAN_ENTITLEMENTS is imported THEN it has entries for free, pro, and business', () => {
@@ -31,6 +31,24 @@ describe('PLAN_ENTITLEMENTS — mapping coverage (R001)', () => {
 
   it('WHEN an unknown plan code is looked up THEN it returns undefined', () => {
     expect(PLAN_ENTITLEMENTS['unknown_plan']).toBeUndefined();
+  });
+});
+
+// T002 — R001, R002
+describe('resolveStrategy — strategy resolution (R001, R002)', () => {
+  it('WHEN resolveStrategy is called with an unknown quota name THEN it returns DEFAULT_QUOTA_STRATEGY', () => {
+    const result = resolveStrategy('unknown_quota');
+    expect(result).toBe(DEFAULT_QUOTA_STRATEGY);
+    expect(result.unit).toBe('request');
+    expect(result.mode).toBe('pre');
+    expect(result.compute({})).toBe(1);
+  });
+
+  it('WHEN resolveStrategy is called with api_requests THEN it returns the registered strategy', () => {
+    const result = resolveStrategy('api_requests');
+    expect(result.unit).toBe('request');
+    expect(result.mode).toBe('pre');
+    expect(result.compute({})).toBe(1);
   });
 });
 
