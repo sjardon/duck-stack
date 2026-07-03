@@ -482,7 +482,7 @@ Introducir el modo `free_trial` al starter pack: al hacer signup, el usuario rec
 
 ## SUBS-009 — Trial UI Gates (frontend)
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

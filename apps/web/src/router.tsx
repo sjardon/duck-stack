@@ -9,6 +9,7 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import OnboardingPage from "./pages/onboarding/OnboardingPage";
 import BillingPage from "./pages/billing/BillingPage";
 import SubscribePage from "./pages/billing/SubscribePage";
+import TrialExpiredPage from "./pages/TrialExpired";
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
   {
     element: <AuthGuard />,
     children: [
+      {
+        path: "/trial-expired",
+        element: <TrialExpiredPage />,
+      },
       {
         path: "/onboarding",
         element: <OnboardingPage />,

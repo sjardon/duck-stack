@@ -29,6 +29,18 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
+
+    if (response.status === 403) {
+      try {
+        const body = JSON.parse(text) as { code?: string };
+        if (body.code === 'TRIAL_EXPIRED') {
+          window.location.replace('/trial-expired');
+        }
+      } catch {
+        // Non-JSON body — fall through to normal error
+      }
+    }
+
     throw new ApiError(text, response.status);
   }
 
