@@ -201,3 +201,22 @@ export interface SubscriptionPlan {
   created_at: string;
   updated_at: string;
 }
+
+// Notifications — email template type system (NOTIFICATIONS-001)
+
+/** Maps every registered template ID to the variable shape it requires. */
+export interface EmailTemplateMap {
+  'example.welcome_demo': { recipientName: string };
+}
+
+/** Union of all registered template identifiers. */
+export type EmailTemplateId = keyof EmailTemplateMap;
+
+/** Typed send request — the generic bound enforces that `variables` match the template. */
+export interface EmailSendRequest<T extends EmailTemplateId = EmailTemplateId> {
+  to: string;
+  templateId: T;
+  variables: EmailTemplateMap[T];
+  requestId?: string;
+  userId?: string;
+}

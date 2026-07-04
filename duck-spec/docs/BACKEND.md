@@ -30,6 +30,8 @@ Living document describing backend conventions, patterns, and stack decisions fo
 
 Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastify plugin registered in `app.ts`. Shared infrastructure (logger, postgres.js database client) lives under `src/shared/infrastructure/`. Reusable plugins under `src/shared/plugins/`.
 
+Some modules additionally ship a **standalone worker entrypoint** (`src/modules/<name>/worker.ts`) that runs as a separate process and is not part of the HTTP server. Workers implement polling or event-driven loops and handle `SIGTERM`/`SIGINT` for graceful drain. A worker that consumes a queue follows the same Port & Adapter pattern as the HTTP path: it depends on port interfaces, never on concrete adapters directly. The `notifications` module (`worker.ts`) is the canonical example of this pattern.
+
 ## Coding conventions
 
 SOLID and Clean Code principles are hard expectations for every module — they govern design decisions, not just implementation polish.
@@ -217,8 +219,12 @@ Feature modules follow a **handler → useCase → IRepository → DBRepository*
 | `useCases/` | One class per endpoint; receives an `IFooRepository` via constructor; contains all business logic |
 | `handlers/` | Thin Fastify handler functions; validate input with Zod, instantiate the use case, call `execute`, reply |
 | `routes.ts` | Fastify plugin that registers all routes for the module with their `preHandler` arrays |
+| `ports/` | TypeScript interfaces for external dependencies (e.g. `IEmailNotifier`, `ISqsEmailQueue`). Present only when the module integrates with an external provider via Port & Adapter. |
+| `adapters/` | Concrete adapter implementations of port interfaces (e.g. `SesEmailNotifier`, `SqsEmailQueue`). Present only when the module has `ports/`. |
+| `templates/` | In-code email templates (React Email components) and the `templateRegistry`. Present only in email-sending modules. |
+| `worker.ts` | Standalone process entrypoint for queue-polling or background work. Present only when the module ships an independently deployable worker. |
 
-This pattern is established by the `billing` module (BILLING-002) and mirrors the `users` module structure. New feature modules must follow the same layout.
+This pattern is established by the `billing` module (BILLING-002) and mirrors the `users` module structure. New feature modules must follow the same layout. The `ports/`, `adapters/`, `templates/`, and `worker.ts` entries are optional extensions introduced by the `notifications` module for provider-integration and background-worker use cases.
 
 ### Layer rules
 

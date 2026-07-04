@@ -27,6 +27,7 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | `apps/web` | Vite + React + TypeScript, React Query, Zustand | Main SPA for authenticated users |
 | `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
 | `apps/services` | Fastify + TypeScript | Backend API. Containerised; deployed to AWS App Runner via ECR. |
+| `apps/services` (notifications worker) | Node.js + TypeScript (`worker.ts`) | Standalone SQS-polling worker for async email delivery. Deployable and scalable independently of the API container. |
 
 ## External integrations
 
@@ -35,6 +36,8 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | Clerk | `apps/web`, `apps/services` | End-to-end identity provider. `apps/web` manages user sessions via `@clerk/clerk-react`. `apps/services` verifies Clerk JWTs locally via `@clerk/backend` (JWKS cached at startup; no per-request Clerk API call). Clerk also delivers lifecycle events (user and organization create/update) to `apps/services` via webhook. |
 | Supabase | `apps/services` | Relational database. `apps/services` connects via `postgres.js` over a direct TCP connection using `DATABASE_URL`. Schema migrations are managed with the Supabase CLI under `apps/services/supabase/migrations/`. |
 | Mobbex | `apps/services` | Payment provider (Argentina/LATAM market). Accessed exclusively through the `PaymentProvider` port defined in `@repo/types`; the `MobbexProvider` adapter in `apps/services/src/modules/billing/providers/` is the only concrete implementation. No other module imports from the adapter directly. |
+| AWS SES (SESv2) | `apps/services` (notifications worker) | Transactional email delivery provider. Accessed exclusively through the `IEmailNotifier` port; the `SesEmailNotifier` adapter in `apps/services/src/modules/notifications/adapters/` is the only concrete implementation. No other module imports from the adapter directly. |
+| AWS SQS | `apps/services` (notifications worker) | Async email delivery queue. `SendEmailUseCase` enqueues messages via `ISqsEmailQueue`; the standalone notifications worker polls the queue, renders templates, and dispatches via SES. Retry policy and dead-letter routing are configured at the SQS level. |
 
 ## Inter-service communication
 
