@@ -58,6 +58,16 @@ export class ProgrammingError extends DomainError {
   }
 }
 
+export class ServiceUnavailableError extends DomainError {
+  constructor(public readonly retryAfterSeconds: number = 2) {
+    super(
+      'SERVICE_UNAVAILABLE',
+      'Identity resolution is still in progress. Please retry shortly.',
+      503,
+    );
+  }
+}
+
 export class QuotaExceededError extends DomainError {
   constructor(
     public readonly quotaName: string,

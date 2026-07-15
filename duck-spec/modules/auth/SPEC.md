@@ -36,16 +36,18 @@ React Router handles all routing. The route table includes:
 
 ## Backend — `apps/services`
 
-`clerk-auth.plugin.ts` is a global Fastify plugin (registered via `fastify-plugin`) that runs an `onRequest` hook on every route. The plugin reads `CLERK_SECRET_KEY` from `process.env` at registration time and throws if the variable is absent. It obtains a Clerk client via `createClerkClient({ secretKey })` from `@clerk/backend`, which fetches and caches Clerk's JWKS key set once — no Clerk API call occurs per request (NF001).
+`clerk-auth.plugin.ts` is a global Fastify plugin (registered via `fastify-plugin`) that runs an `onRequest` hook on every route. The plugin reads `CLERK_SECRET_KEY` from `process.env` at registration time and throws if the variable is absent. It obtains a Clerk client via `createClerkClient({ secretKey })` from `@clerk/backend`, which fetches and caches Clerk's JWKS key set once — no Clerk API call occurs per request for JWT verification (NF001).
 
-The `onRequest` hook extracts the `Authorization: Bearer <token>` header. When the header is absent the request decorations are left undefined and no 401 is issued. When a token is present and valid, `request.userId` is set to the JWT's `sub` claim and `request.orgId` is set to `org_id ?? null`. When verification fails (expired, invalid signature, malformed header) `request.userId` is left undefined.
-
-`FastifyRequest` is augmented (in `src/types/fastify.d.ts`) with:
+The `onRequest` hook extracts the `Authorization: Bearer <token>` header. When the header is absent the request decorations are left undefined and no 401 is issued. When verification fails (expired, invalid signature, malformed header) the request decorations are left undefined and the request proceeds unauthenticated. When a token is present and valid, the plugin decorates:
 
 | Property | Type | Meaning |
 |----------|------|---------|
-| `userId` | `string \| undefined` | Present and set when a valid JWT was verified |
-| `orgId` | `string \| null \| undefined` | `string` when an org claim exists, `null` when authenticated without org, `undefined` when no valid JWT |
+| `clerkUserId` | `string \| undefined` | The JWT's raw `sub` claim (Clerk user ID) |
+| `clerkOrgId` | `string \| null \| undefined` | The JWT's raw `org_id` claim, or `null` when authenticated without an active organization |
+| `userId` | `string \| undefined` | The internal `users.id` UUID resolved for the caller (see "Internal identity resolution" below) |
+| `orgId` | `string \| null \| undefined` | The internal `organizations.id` UUID resolved for the caller, or `null` when authenticated without an active organization |
+
+`request.userId`/`request.orgId` carry the internal UUID, **not** the Clerk ID — every module that queries or writes FK columns (`subscriptions`, `billing`, `usage_counters`) treats these as opaque UUID strings. The `users` module handlers (`GET /users/me`, `PATCH /users/me`, `POST /users/me/onboarding`) are the one exception: they resolve the caller's row by `request.clerkUserId` instead, since `users` is keyed on `clerk_user_id`.
 
 Two preHandler functions guard routes:
 
@@ -55,6 +57,17 @@ Two preHandler functions guard routes:
 | `requireOrg` | `ForbiddenError` (403) | `request.orgId` is `null` (calls `requireAuth` first) |
 
 `ForbiddenError` extends `DomainError` with `statusCode: 403` and code `FORBIDDEN`. Neither `requireAuth` nor `requireOrg` is registered globally — each route that requires protection attaches the relevant preHandler explicitly.
+
+## Internal identity resolution
+
+The Clerk JWT carries custom claims `app_user_id`/`app_org_id` (sourced from `private_metadata.appUserId`/`private_metadata.appOrgId`), which the plugin uses to resolve `request.userId`/`request.orgId` without a database hit on the happy path:
+
+- **Claim present (fast path):** the claim value is used directly as `request.userId`/`request.orgId`. No DB call, no added latency.
+- **Claim absent (webhook-lag / pre-AUTH-005 identities):** the plugin looks up the internal UUID in `users`/`organizations` by `clerk_user_id`/`clerk_org_id`, retrying with exponential backoff (starting at 100ms) for up to 2 seconds total. If found, the request proceeds normally and the plugin fires a **non-blocking** write of the resolved UUID back to Clerk `private_metadata` (failures logged at `warn`, never surfaced to the caller) so the next JWT for that identity carries the claim. If the lookup budget is exhausted without a match, the plugin throws a `ServiceUnavailableError`, and the request receives HTTP 503 with a `Retry-After` header.
+
+Independently, the `user.created` and `organization.created` webhook handlers write `private_metadata.appUserId`/`appOrgId` **synchronously**, immediately after the DB upsert and before any other webhook side effect. If that write fails, the webhook responds with a non-2xx status so Clerk retries the event (up to ~24h) — this is the primary reliability path; the plugin's lazy backfill is the self-healing fallback for identities created before this feature, or for requests that arrive while a webhook retry is still pending.
+
+A manually-edited `private_metadata` value in the Clerk dashboard is trusted as-is with no additional validation once present in the claim.
 
 ## Organization (multi-tenancy)
 
@@ -121,5 +134,7 @@ Event dispatching is handled by a `dispatchClerkEvent` function that maps event 
 | (unrecognised) | — | Returns HTTP 200 without modifying any table |
 
 All database operations are centralized in `ClerkSyncRepository`. Upserts use `ON CONFLICT ... DO UPDATE` semantics so that out-of-order or replayed events are idempotent. `createMembership` resolves local UUIDs from `clerk_user_id` and `clerk_org_id` before inserting; if either lookup finds no row, it logs a warning and skips the insert without raising a foreign-key error.
+
+Immediately after the DB upsert, the `user.created` and `organization.created` branches also write the resolved internal UUID back to Clerk as `private_metadata.appUserId`/`appOrgId` (via `ClerkMetadataProvider`, backed by `clerkClient.users.updateUserMetadata`/`organizations.updateOrganizationMetadata`). This write is blocking: if it fails, the handler propagates a `ProviderError` (502) so the webhook response is non-2xx and Clerk retries the event. This is what makes `app_user_id`/`app_org_id` available on the JWT for `clerkAuthPlugin` to read on the fast path (see "Internal identity resolution" above). `user.updated` does not repeat this write — the claim is set once at creation and is immutable by design.
 
 The webhook plugin is registered in `app.ts` before `clerkAuthPlugin` so the global `onRequest` auth hook does not interfere with the intentionally unauthenticated webhook route.

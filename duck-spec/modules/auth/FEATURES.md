@@ -209,7 +209,7 @@ Capturar datos de segmentación del usuario en su primer acceso mediante una pan
 
 ## AUTH-005 — Internal Identity Resolution via JWT Claim
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

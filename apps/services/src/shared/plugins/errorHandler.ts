@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
-import { DomainError, QuotaExceededError, TrialExpiredError } from '../errors.js';
+import { DomainError, QuotaExceededError, TrialExpiredError, ServiceUnavailableError } from '../errors.js';
 import { logger } from '../infrastructure/logger.js';
 
 function logError(error: unknown): void {
@@ -61,6 +61,13 @@ export default fp(async function errorHandlerPlugin(fastify: FastifyInstance) {
         message: error.message,
         trialEndedAt: error.trialEndedAt,
       });
+    }
+
+    if (error instanceof ServiceUnavailableError) {
+      return reply
+        .status(503)
+        .header('Retry-After', String(error.retryAfterSeconds))
+        .send({ code: error.code, message: error.message });
     }
 
     if (error instanceof DomainError) {

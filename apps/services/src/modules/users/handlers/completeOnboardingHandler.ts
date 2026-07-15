@@ -23,7 +23,7 @@ export async function completeOnboardingHandler(
   const repo = new UserDBRepository(db);
   const useCase = new CompleteOnboardingUseCase(repo);
 
-  const profile = await useCase.execute(request.userId!, body);
+  const profile = await useCase.execute(request.clerkUserId!, body);
 
   return reply.send({ data: profile });
 }

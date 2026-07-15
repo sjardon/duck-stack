@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import { DomainError, NotFoundError, ValidationError } from '../../../../src/shared/errors.js';
+import { DomainError, NotFoundError, ValidationError, ServiceUnavailableError } from '../../../../src/shared/errors.js';
 
 // Mock the static logger so we can spy on its methods
 jest.mock('../../../../src/shared/infrastructure/logger.js', () => ({
@@ -265,6 +265,42 @@ describe('errorHandler — non-DomainError HTTP response', () => {
 
     expect(response.statusCode).toBe(500);
     expect(body).toEqual({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+
+    await fastify.close();
+  });
+});
+
+// T003 — R007: ServiceUnavailableError serializes with Retry-After header
+describe('errorHandler — ServiceUnavailableError (R007)', () => {
+  it('WHEN errorHandler intercepts a ServiceUnavailableError THEN replies 503 with Retry-After header and { code, message } body', async () => {
+    const fastify = await buildApp();
+    const err = new ServiceUnavailableError();
+
+    fastify.get('/test', () => {
+      throw err;
+    });
+
+    const response = await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers['retry-after']).toBe('2');
+    const body = JSON.parse(response.body) as Record<string, unknown>;
+    expect(body).toEqual({ code: 'SERVICE_UNAVAILABLE', message: err.message });
+
+    await fastify.close();
+  });
+
+  it('WHEN errorHandler intercepts a ServiceUnavailableError with a custom retryAfterSeconds THEN Retry-After reflects it', async () => {
+    const fastify = await buildApp();
+
+    fastify.get('/test', () => {
+      throw new ServiceUnavailableError(7);
+    });
+
+    const response = await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers['retry-after']).toBe('7');
 
     await fastify.close();
   });
