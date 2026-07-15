@@ -204,3 +204,69 @@ Capturar datos de segmentación del usuario en su primer acceso mediante una pan
 - AUTH-001 — `requireAuth` y `AuthGuard` deben existir
 - AUTH-002 — la tabla `users` en Supabase debe existir
 - AUTH-003 — `GET /users/me` debe exponer `onboarding_completed` para que `AuthGuard` pueda leerlo
+
+---
+
+## AUTH-005 — Internal Identity Resolution via JWT Claim
+
+**Estado:** TODO
+
+### Contexto
+
+El `clerkAuthPlugin` decora los requests con `request.userId = payload.sub`, donde `payload.sub` es el ID de Clerk (formato `user_xxx`). Sin embargo, múltiples repositorios en los módulos `subscriptions` y `billing` usan ese valor como si fuera el UUID interno de `users.id` en consultas y writes contra columnas FK (`subscriptions.user_id`, `transactions.user_id`, `usage_counters.user_id`). Estos writes fallan por FK violation y las consultas nunca matchean, causando comportamientos incorrectos (suscripciones no encontradas, transacciones inaccesibles, quotas siempre en cero). El mismo problema afecta a `request.orgId` respecto de `organizations.id`. El módulo `users` no está afectado porque consulta explícitamente por `clerk_user_id`.
+
+### Objetivo
+
+Hacer que `request.userId` y `request.orgId` contengan los UUIDs internos (`users.id`, `organizations.id`) en vez de los IDs de Clerk, de modo que todas las queries y writes de `subscriptions`, `billing` y `usage_counters` se resuelvan correctamente contra sus columnas FK. Preservar el acceso al ID de Clerk crudo para los pocos casos donde sea necesario (como el módulo `users`, que consulta por `clerk_user_id`).
+
+### Requerimientos funcionales
+
+- Cualquier request autenticado expone a los handlers río abajo la identidad interna del usuario (UUID de `users.id`), en vez del ID de Clerk
+- Lo mismo aplica al scope de organización: el UUID de `organizations.id` está disponible en el contexto del request cuando el JWT trae un `org_id` de Clerk, o `null` si no hay org activa
+- Los handlers pueden acceder al ID de Clerk crudo (usuario y organización) para casos que lo requieran
+- Los handlers actuales del módulo `users` (`GET /users/me`, `PATCH /users/me`, `POST /users/me/onboarding`) siguen resolviendo por ID de Clerk sin regresiones funcionales
+- Cuando un usuario recién creado en Clerk aún no está sincronizado en la DB local (webhook lag), sus requests autenticados esperan hasta 2 segundos con reintentos antes de responder
+- Si tras los 2 segundos la sincronización no se completó, el backend responde HTTP 503 con un header `Retry-After`
+- El sistema auto-repara la asociación identidad-JWT: usuarios y organizaciones existentes cuyo JWT aún no incluya la identidad interna resuelta reciben el mapeo correcto en el primer request, y sus JWTs siguientes ya lo incluyen sin lookup adicional
+- Los webhooks `user.created` y `organization.created` fallan con 5xx si no logran registrar la identidad interna en Clerk, para que Clerk reintente el evento
+
+### Fuera de scope
+
+- Migración de datos existentes en `subscriptions`, `transactions`, `usage_counters`, `refunds` o cualquier otra tabla con registros escritos con Clerk IDs en columnas UUID (se asume entorno pre-productivo; el fix corrige el mismatch de aquí en adelante)
+- Cache in-memory (LRU u otro) de la traducción Clerk ID → UUID interno; el claim en el JWT ya elimina el DB hit en el caso happy
+- Endpoints nuevos para que el frontend consulte el UUID interno
+- Cambios en el signup flow del frontend
+- Cambios en RLS o policies de Supabase
+- Handlers de `user.deleted` u `organization.deleted` (fuera del alcance de AUTH-002)
+- Rotación o refresco manual de los claims por operadores; el mapping es inmutable por diseño
+
+### Requerimientos no funcionales
+
+- El path happy (claim presente en el JWT) no debe agregar latencia perceptible al request respecto del baseline actual
+- El path degradado (row missing, con reintentos) tiene un techo total de 2 segundos antes de responder 503
+- Los reintentos de lookup usan backoff exponencial para evitar dogpile en la DB durante un pico de webhook lag
+- El write a Clerk metadata desde el plugin (lazy backfill) es fire-and-forget y no agrega latencia al request; sus fallos se loguean como warning
+- El write a Clerk metadata desde el webhook es bloqueante: su falla obliga al webhook a devolver 5xx para aprovechar los reintentos automáticos de Clerk
+
+### Edge cases
+
+- JWT válido con claim `app_user_id` pero la row en `users` fue borrada manualmente → los downstream queries retornan empty o 404 normal (los FKs son `ON DELETE SET NULL`); el sistema no debe crashear
+- Usuario u organización creados antes de esta feature (sin claim en Clerk) → el primer request autenticado paga un lookup en la DB y auto-healea vía backfill del metadata
+- `private_metadata` editado manualmente desde el dashboard de Clerk → mitigado parcialmente por el uso de `private_metadata` (no expuesto al frontend, menos accesible desde la UI); no se implementa validación adicional
+- Webhook `user.created` u `organization.created` que falla persistentemente al actualizar Clerk metadata → Clerk reintenta con backoff exponencial hasta ~24h; el lazy backfill del plugin actúa como red de seguridad si algún request llega antes de que el webhook logre completar
+- Usuario cambia de organización activa en Clerk → cada JWT nuevo trae su propio `app_org_id`; no hay estado stale porque los claims viven en el JWT
+- Múltiples requests concurrentes del mismo usuario recién creado hitean el path de retry simultáneamente → aceptable en primera versión; deduplication in-flight puede considerarse como optimización futura si las métricas muestran dogpile
+
+### Technical constraints
+
+- Custom claims `app_user_id` y `app_org_id` configurados en el JWT template de Clerk, leídos desde `private_metadata.appUserId` y `private_metadata.appOrgId`
+- Uso de `private_metadata` (no `public_metadata`) para reducir superficie de manipulación desde el dashboard y no exponer el ID interno al frontend
+- Writes a Clerk metadata vía `clerkClient.users.updateUserMetadata` y `clerkClient.organizations.updateOrganizationMetadata` desde `@clerk/backend`
+- El `clerkAuthPlugin` decora el request con las propiedades `request.userId`, `request.orgId`, `request.clerkUserId`, `request.clerkOrgId`
+- Estrategia de reliability dual: (a) el webhook devuelve 5xx en falla del metadata write; (b) lazy backfill (SELECT + fire-and-forget `updateMetadata`) en el plugin como red de seguridad
+- El plugin sigue siendo compatible con requests no autenticados (sin `Authorization`) y con JWTs inválidos: solo aplica la lógica de resolución cuando el JWT es válido
+
+### Dependencias
+
+- AUTH-001 — modifica el `clerkAuthPlugin` existente y depende de la infra de verificación de JWT
+- AUTH-002 — modifica los webhooks `user.created` y `organization.created`, y depende del schema `users` / `organizations`

@@ -25,7 +25,11 @@ export async function apiFetch<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  console.log(`apiFetch: ${init.method ?? 'GET'} ${baseUrl}${path} with token: ${token ? '***' : 'none'}`);
+
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
+
+  console.log(`apiFetch: response status ${response.status} for ${init.method ?? 'GET'} ${baseUrl}${path}`);
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);

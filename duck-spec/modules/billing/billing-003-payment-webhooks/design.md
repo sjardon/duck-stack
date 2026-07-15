@@ -32,7 +32,7 @@ New table `billing_webhook_events`:
 
 ```sql
 CREATE TABLE billing_webhook_events (
-  id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID         PRIMARY KEY DEFAULT public.uuid_generate_v4()(),
   provider        TEXT         NOT NULL,
   event_type      TEXT         NOT NULL,
   payload         JSONB        NOT NULL,

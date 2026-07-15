@@ -1,5 +1,5 @@
 CREATE TABLE billing_webhook_events (
-  id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   provider        TEXT         NOT NULL,
   event_type      TEXT         NOT NULL,
   payload         JSONB        NOT NULL,

@@ -1,7 +1,7 @@
 CREATE TABLE usage_counters (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      text        REFERENCES users(id) ON DELETE SET NULL,
-  org_id       text        REFERENCES organizations(id) ON DELETE SET NULL,
+  user_id      uuid        REFERENCES users(id) ON DELETE SET NULL,
+  org_id       uuid        REFERENCES organizations(id) ON DELETE SET NULL,
   quota_name   text        NOT NULL,
   period_start timestamptz NOT NULL,
   count        integer     NOT NULL DEFAULT 0,

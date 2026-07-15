@@ -1,4 +1,3 @@
-import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { verifyWebhook } from '@clerk/backend/webhooks';
 import { db } from '../../../shared/infrastructure/db.js';
@@ -9,7 +8,7 @@ import { authConfig } from '../../../shared/configs/authConfig.js';
 import { ValidationError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 
-export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
+export default async function clerkWebhookRoutes(fastify: FastifyInstance) {
   const signingSecret = authConfig.clerkWebhookSigningSecret;
 
   if (!signingSecret) {
@@ -72,4 +71,4 @@ export default fp(async function clerkWebhookRoutes(fastify: FastifyInstance) {
     // Success (R008, NF002)
     return reply.status(200).send({ received: true });
   });
-});
+}

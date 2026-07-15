@@ -1,6 +1,6 @@
 -- refunds table for tracking provider-initiated refund events
 CREATE TABLE refunds (
-  id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id      UUID         NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   amount              NUMERIC      NOT NULL,
   reason              TEXT,

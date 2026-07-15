@@ -1,6 +1,6 @@
 -- transactions table for billing checkout records
 CREATE TABLE transactions (
-  id                     UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id                UUID         REFERENCES users(id) ON DELETE SET NULL,
   org_id                 UUID         REFERENCES organizations(id) ON DELETE SET NULL,
   provider               TEXT         NOT NULL,

@@ -37,7 +37,7 @@ New migration `20260623200000_refunds.sql`:
 
 ```sql
 CREATE TABLE refunds (
-  id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                  UUID         PRIMARY KEY DEFAULT public.uuid_generate_v4()(),
   transaction_id      UUID         NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   amount              NUMERIC      NOT NULL,
   reason              TEXT,

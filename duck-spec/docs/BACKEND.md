@@ -218,8 +218,6 @@ Feature modules follow a **handler → useCase → IRepository → DBRepository*
 | `handlers/` | Thin Fastify handler functions; validate input with Zod, instantiate the use case, call `execute`, reply |
 | `routes.ts` | Fastify plugin that registers all routes for the module with their `preHandler` arrays |
 
-This pattern is established by the `billing` module (BILLING-002) and mirrors the `users` module structure. New feature modules must follow the same layout.
-
 ### Layer rules
 
 - **One handler per feature.** Handlers only instantiate repositories and inject them into the use case. No business logic. Create the use case at module scope (outside the handler function), in the same file.

@@ -1,7 +1,7 @@
 CREATE TABLE subscriptions (
   id                       uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id                  text        REFERENCES users(id) ON DELETE SET NULL,
-  org_id                   text        REFERENCES organizations(id) ON DELETE SET NULL,
+  user_id                  uuid        REFERENCES users(id) ON DELETE SET NULL,
+  org_id                   uuid        REFERENCES organizations(id) ON DELETE SET NULL,
   plan_id                  uuid        NOT NULL REFERENCES subscription_plans(id),
   provider                 text        NOT NULL,
   provider_subscription_id text,

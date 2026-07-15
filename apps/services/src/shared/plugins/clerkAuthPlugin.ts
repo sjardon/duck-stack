@@ -32,6 +32,7 @@ export default fp(async function clerkAuthPlugin(fastify: FastifyInstance) {
       // jwtKey (PEM public key) enables fully networkless verification (NF001).
       // Falls back to JWKS fetch via secretKey only if jwtKey is not configured.
       const payload = await verifyToken(token, jwtKey ? { jwtKey } : { secretKey });
+      
       request.userId = payload.sub;
       request.orgId = (payload as Record<string, unknown>)['org_id'] as string | null ?? null;
     } catch (err) {

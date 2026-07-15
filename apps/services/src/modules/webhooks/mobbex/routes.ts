@@ -1,4 +1,3 @@
-import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { mobbexConfig } from '../../../shared/configs/mobbexConfig.js';
 import { db } from '../../../shared/infrastructure/db.js';
@@ -8,7 +7,7 @@ import { SUBSCRIPTION_EVENT_TYPES, dispatchMobbexSubscriptionEvent } from './mob
 import { UnauthorizedError, ValidationError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 
-export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
+export default async function mobbexWebhookRoutes(fastify: FastifyInstance) {
   const webhookSecret = mobbexConfig.webhookSecret;
 
   if (!webhookSecret) {
@@ -81,4 +80,4 @@ export default fp(async function mobbexWebhookRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ received: true });
     },
   );
-});
+}

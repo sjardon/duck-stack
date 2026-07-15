@@ -1,6 +1,3 @@
--- Enable uuid-ossp extension for uuid_generate_v4()
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Reusable trigger function to keep updated_at current
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -12,7 +9,7 @@ $$ LANGUAGE plpgsql;
 
 -- users table
 CREATE TABLE users (
-  id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   clerk_user_id TEXT        UNIQUE NOT NULL,
   email         TEXT        NOT NULL,
   name          TEXT        NOT NULL,
@@ -27,7 +24,7 @@ CREATE TRIGGER users_set_updated_at
 
 -- organizations table
 CREATE TABLE organizations (
-  id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   clerk_org_id TEXT        UNIQUE NOT NULL,
   name         TEXT        NOT NULL,
   slug         TEXT        UNIQUE NOT NULL,

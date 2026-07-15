@@ -27,7 +27,7 @@ One migration file creates all three tables. `uuid_generate_v4()` is used for pr
 ```sql
 -- users
 CREATE TABLE users (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          UUID PRIMARY KEY DEFAULT public.uuid_generate_v4()(),
   clerk_user_id TEXT UNIQUE NOT NULL,
   email       TEXT NOT NULL,
   name        TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE users (
 
 -- organizations
 CREATE TABLE organizations (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT public.uuid_generate_v4()(),
   clerk_org_id TEXT UNIQUE NOT NULL,
   name         TEXT NOT NULL,
   slug         TEXT UNIQUE NOT NULL,
