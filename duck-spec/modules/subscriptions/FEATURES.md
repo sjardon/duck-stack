@@ -621,3 +621,33 @@ Extender SUBS-006 con un registro de estrategias por quota que permita (1) calcu
 
 - SUBS-006 — preHandler `requireQuota`, tabla `usage_counters`, endpoint `GET /billing/quotas/me`, mapping de thresholds
 - SUBS-005 — patrón de mapping en `entitlements.ts` y tipos compartidos
+
+---
+
+## SUBS-011 — Restaurar la testabilidad de `getMySubscriptionHandler`
+
+**Estado:** DONE
+
+### Contexto
+
+El handler `getMySubscriptionHandler` (en `apps/services/src/modules/subscriptions/handlers/getMySubscriptionHandler.ts`) pasó a construir sus dependencias (repositorio y use case) a nivel de módulo, ejecutándose en el momento del import. Esto rompe el setup de mocks del test unitario `getMySubscriptionHandler.test.ts`, que falla con un `ReferenceError` de TDZ (acceso a una variable antes de su inicialización). El fallo es pre-existente y no fue introducido por AUTH-005.
+
+### Objetivo
+
+Corregir el test unitario fallido restaurando la resolución de dependencias del handler de modo que sea mockeable, sin alterar el comportamiento observable del handler.
+
+### Requerimientos funcionales
+
+- La suite de tests unitarios de `getMySubscriptionHandler` pasa
+- El handler sigue devolviendo la suscripción actual del usuario autenticado, o `null` cuando no existe ninguna
+- El handler sigue resolviendo la suscripción usando el usuario y la organización del request
+
+### Fuera de scope
+
+- Cambiar la forma de la respuesta del endpoint
+- Cambiar la lógica del use case `GetMySubscriptionUseCase`
+- Modificar otros handlers del módulo `subscriptions`
+
+### Requerimientos no funcionales
+
+- El comportamiento observable del endpoint permanece idéntico al actual (refactor de solo testabilidad, sin cambio funcional)

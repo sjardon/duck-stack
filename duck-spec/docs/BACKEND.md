@@ -240,7 +240,7 @@ Feature modules follow a **handler → useCase → IRepository → DBRepository*
 
 ### Layer rules
 
-- **One handler per feature.** Handlers only instantiate repositories and inject them into the use case. No business logic. Create the use case at module scope (outside the handler function), in the same file.
+- **One handler per feature.** Handlers only instantiate repositories and inject them into the use case. No business logic. Instantiate the repository and the use case inside the handler function body (per invocation), in the same file — not at module scope. Module-scope instantiation runs at import time, which breaks `jest.mock()`-based unit tests that need to inject mocks before the dependency is constructed.
 - **One use case per feature.** Use cases contain pure business logic with no framework or concrete service dependencies. They only consume repositories — **a use case never consumes another use case** under any circumstance.
 - **One repository per entity per data source.** `usersRepository.ts`, `usersCacheRepository.ts`, `usersEventsRepository.ts` are separate repositories because they target different data sources for the same entity. Mixing two entities in one repository (e.g. transactions + refunds) is a SRP violation — split them.
 - **Shared repositories live in `src/shared/repositories/`** when two or more modules depend on the same repository.
