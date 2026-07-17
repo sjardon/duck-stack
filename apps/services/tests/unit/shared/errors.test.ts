@@ -8,6 +8,7 @@ import {
   EntitlementRequiredError,
   QuotaExceededError,
   TrialExpiredError,
+  ServiceUnavailableError,
 } from '../../../src/shared/errors.js';
 
 // T001 — R001, R003: DomainError stores originalError
@@ -177,6 +178,34 @@ describe('TrialExpiredError — construction (R007)', () => {
   });
 
   it('WHEN constructed THEN it is an instance of DomainError', () => {
+    expect(err).toBeInstanceOf(DomainError);
+  });
+});
+
+// T001 — R007: ServiceUnavailableError shape
+describe('ServiceUnavailableError — construction (R007)', () => {
+  it('WHEN constructed without arguments THEN statusCode is 503', () => {
+    const err = new ServiceUnavailableError();
+    expect(err.statusCode).toBe(503);
+  });
+
+  it('WHEN constructed without arguments THEN code is SERVICE_UNAVAILABLE', () => {
+    const err = new ServiceUnavailableError();
+    expect(err.code).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('WHEN constructed without arguments THEN retryAfterSeconds defaults to 2', () => {
+    const err = new ServiceUnavailableError();
+    expect(err.retryAfterSeconds).toBe(2);
+  });
+
+  it('WHEN constructed with a custom retryAfterSeconds THEN it is stored as provided', () => {
+    const err = new ServiceUnavailableError(5);
+    expect(err.retryAfterSeconds).toBe(5);
+  });
+
+  it('WHEN constructed THEN it is an instance of DomainError', () => {
+    const err = new ServiceUnavailableError();
     expect(err).toBeInstanceOf(DomainError);
   });
 });

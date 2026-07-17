@@ -95,6 +95,22 @@ describe('ClerkSyncRepository.upsertUser — SQL error path (R001, R002, R007, N
   });
 });
 
+// T027 — R009: upsertOrganization returns internal UUID
+describe('ClerkSyncRepository.upsertOrganization — returns internal UUID (R009)', () => {
+  it('WHEN upsertOrganization is called THEN it returns { id: string } containing the internal UUID', async () => {
+    const { sql } = makeSqlMock([{ id: 'internal-org-uuid-001' }]);
+    const repo = new ClerkSyncRepository(sql as never);
+
+    const result = await repo.upsertOrganization({
+      clerkOrgId: 'org-001',
+      name: 'Acme',
+      slug: 'acme',
+    });
+
+    expect(result).toEqual({ id: 'internal-org-uuid-001' });
+  });
+});
+
 // T009 — upsertOrganization error path
 
 describe('ClerkSyncRepository.upsertOrganization — SQL error path (R001, R002, R007, NF001, NF002, NF003)', () => {

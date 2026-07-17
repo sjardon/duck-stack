@@ -79,6 +79,7 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `QuotaExceededError` | 429 | `QUOTA_EXCEEDED` |
 | `TrialExpiredError` | 403 | `TRIAL_EXPIRED` |
 | `ProgrammingError` | 500 | `PROGRAMMING_ERROR` |
+| `ServiceUnavailableError` | 503 | `SERVICE_UNAVAILABLE` |
 
 `ProviderError` is used exclusively by infrastructure adapters that call external payment/provider APIs. `statusCode 502` signals a transient or upstream failure (5xx responses, HTTP 401 from the provider, network errors, timeouts); `statusCode 400` signals a validation error reported by the provider itself.
 
@@ -87,6 +88,8 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 `TrialExpiredError` carries `trialEndedAt` (the ISO timestamp when the trial expired) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and serializes `trialEndedAt` alongside `code` and `message` in the 403 response body. Both `QuotaExceededError` and `TrialExpiredError` are `DomainError` subclasses for which `errorHandler` emits a response body richer than `{ code, message }`.
 
 `ProgrammingError` signals a developer mistake caught at runtime — such as calling `chargeQuota` without a preceding `requireQuota` for the same quota name, or calling `chargeQuota` on a `pre`-mode quota. It is a `DomainError` subclass with `statusCode 500` and always results in the standard `INTERNAL_ERROR` 500 response visible to the client; the real code is logged. It is never thrown for end-user-originated input (use `ValidationError` for those cases).
+
+`ServiceUnavailableError` carries `retryAfterSeconds` (default `2`) in addition to the standard `code` and `message`. The `errorHandler` detects this subclass and sets a `Retry-After` response header to that value, on top of the standard `{ code, message }` body at 503 — the same special-casing pattern used for `QuotaExceededError`/`TrialExpiredError`, but affecting a header instead of the body. It signals a bounded, retryable degraded condition (e.g. an internal-identity lookup that has not resolved within its budget) rather than a permanent failure.
 
 `shared/plugins/errorHandler.ts` intercepts every error: `DomainError` instances are serialized as `{ code, message }` at the error's `statusCode`; any other error is replied as a fixed `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` at status 500, with the real detail logged but never sent to the client. See the next section for the full propagation and logging contract.
 
@@ -120,7 +123,7 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | `DomainError` | `{ code, message }` from the instance | error's `statusCode` |
 | Any other | `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` | 500 |
 
-`originalError` is logged but never serialized in the response.
+`originalError` is logged but never serialized in the response. `QuotaExceededError`, `TrialExpiredError`, and `ServiceUnavailableError` are special-cased with additional response data (extra body fields or, for `ServiceUnavailableError`, a `Retry-After` header) beyond the base `{ code, message }` contract — see "Domain error model" above.
 
 ### Silent-fail exception
 
@@ -144,17 +147,34 @@ Registered globally in `app.ts`:
 `shared/plugins/clerkAuthPlugin.ts` is registered via `fastify-plugin` immediately after the security plugins so its `onRequest` hook fires on all routes. The plugin:
 
 1. Reads `CLERK_SECRET_KEY` from `process.env` at registration time; throws if absent.
-2. Creates a Clerk client via `@clerk/backend`'s `createClerkClient`, which fetches and caches Clerk's JWKS key set once. No Clerk API call occurs per request.
-3. Registers a global `onRequest` hook that extracts the `Authorization: Bearer <token>` header, calls `verifyToken`, and decorates the request with `userId` and `orgId`.
+2. Creates a Clerk client via `@clerk/backend`'s `createClerkClient`, which fetches and caches Clerk's JWKS key set once. No Clerk API call occurs per request for JWT verification.
+3. Registers a global `onRequest` hook that extracts the `Authorization: Bearer <token>` header, calls `verifyToken`, and — on success — decorates the request with `clerkUserId`/`clerkOrgId` (the raw Clerk IDs) and `userId`/`orgId` (the internal `users.id`/`organizations.id` UUIDs, resolved via `resolveIdentityClaim`).
 
 `FastifyRequest` is augmented in `src/types/fastify.d.ts`:
 
 | Property | Type |
 |----------|------|
+| `clerkUserId` | `string \| undefined` |
+| `clerkOrgId` | `string \| null \| undefined` |
 | `userId` | `string \| undefined` |
 | `orgId` | `string \| null \| undefined` |
 
-`userId` and `orgId` are `undefined` when no `Authorization` header is present or when verification fails. `orgId` is `null` when the JWT is valid but carries no organization claim.
+All four are `undefined` when no `Authorization` header is present or when verification fails; `clerkOrgId`/`orgId` are `null` when the JWT is valid but carries no organization claim.
+
+### Internal-identity claim resolution
+
+`userId`/`orgId` are **not** the Clerk IDs — they are the internal UUIDs (`users.id`/`organizations.id`), because most feature modules (`subscriptions`, `billing`, `usage_counters`) treat these request properties as opaque values written directly into FK columns. `clerkUserId`/`clerkOrgId` remain available on the request for the few consumers (the `users` module) that key on `clerk_user_id`/`clerk_org_id` instead.
+
+`shared/plugins/resolveIdentityClaim.ts` implements the resolution:
+
+1. **Fast path.** If the JWT carries a custom `app_user_id`/`app_org_id` claim (sourced from `private_metadata.appUserId`/`appOrgId`), that value is used directly — no DB call, no added latency.
+2. **Degraded path.** If the claim is absent, the plugin retries a DB lookup by `clerk_user_id`/`clerk_org_id` with exponential backoff (starting at 100ms, doubling, capped to the remaining budget) for up to a 2-second total budget. On success, the request proceeds and a fire-and-forget write pushes the resolved UUID back into Clerk `private_metadata` (failures logged at `warn`, non-critical because the webhook-side write below is the primary path). On budget exhaustion the plugin throws `ServiceUnavailableError`, replied by `errorHandler` as HTTP 503 with `Retry-After`.
+
+The `user.created`/`organization.created` handlers in `src/modules/webhooks/clerk/` perform the primary, blocking half of this reliability strategy: they write the internal UUID into Clerk `private_metadata` synchronously, right after the DB upsert; a failed write propagates as a thrown `ProviderError` so the webhook responds non-2xx and Clerk retries the event. The plugin's lazy backfill (above) is the self-healing fallback for identities created before this mechanism existed, or for requests that race an in-flight webhook retry.
+
+### Shared providers
+
+`src/shared/providers/` holds provider adapters shared by more than one module (mirrors the `shared/repositories/` rule below, but for external-provider clients rather than the database) — e.g. `ClerkMetadataProvider`, consumed by both `clerkAuthPlugin` and `modules/webhooks/clerk/`. Module-scoped provider adapters (a single consumer) stay under `modules/<feature>/providers/`, as with `modules/billing/providers/mobbexProvider.ts`.
 
 ## Route-level auth preHandlers
 

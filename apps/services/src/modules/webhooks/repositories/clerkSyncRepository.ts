@@ -47,16 +47,18 @@ export class ClerkSyncRepository {
     }
   }
 
-  async upsertOrganization(data: UpsertOrganizationData): Promise<void> {
+  async upsertOrganization(data: UpsertOrganizationData): Promise<{ id: string }> {
     const start = Date.now();
     try {
-      await this.sql`
+      const rows = await this.sql<Array<{ id: string }>>`
         INSERT INTO organizations (clerk_org_id, name, slug)
         VALUES (${data.clerkOrgId}, ${data.name}, ${data.slug})
         ON CONFLICT (clerk_org_id) DO UPDATE
           SET name = EXCLUDED.name,
-              slug = EXCLUDED.slug`;
+              slug = EXCLUDED.slug
+        RETURNING id`;
       logger.info({ duration: Date.now() - start }, 'ClerkSyncRepository.upsertOrganization');
+      return rows[0];
     } catch (err: unknown) {
       if (err instanceof DomainError) throw err;
       logger.error(

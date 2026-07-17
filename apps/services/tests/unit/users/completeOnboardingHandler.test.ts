@@ -40,8 +40,8 @@ function makeReply() {
   return reply as unknown as FastifyReply;
 }
 
-function makeRequest(body: unknown, userId = 'clerk_abc'): FastifyRequest {
-  return { body, userId } as unknown as FastifyRequest;
+function makeRequest(body: unknown, clerkUserId = 'clerk_abc'): FastifyRequest {
+  return { body, userId: 'internal-uuid-should-not-be-used', clerkUserId } as unknown as FastifyRequest;
 }
 
 describe('completeOnboardingHandler', () => {

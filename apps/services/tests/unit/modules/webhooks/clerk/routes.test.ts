@@ -13,6 +13,15 @@ jest.mock('../../../../../src/shared/infrastructure/logger.js', () => ({
 // Mock db before importing routes
 jest.mock('../../../../../src/shared/infrastructure/db.js', () => ({ db: {} }));
 
+// Mock clerkClient before importing routes
+jest.mock('../../../../../src/shared/infrastructure/clerkClient.js', () => ({ clerkClient: {} }));
+
+// Mock ClerkMetadataProvider so we can assert on the instance passed to dispatchClerkEvent
+const mockMetadataProviderInstance = { setUserAppId: jest.fn(), setOrgAppId: jest.fn() };
+jest.mock('../../../../../src/shared/providers/clerkMetadataProvider.js', () => ({
+  ClerkMetadataProvider: jest.fn().mockImplementation(() => mockMetadataProviderInstance),
+}));
+
 // Mock authConfig so we can control the signing secret without env reloads
 jest.mock('../../../../../src/shared/configs/authConfig.js', () => ({
   authConfig: {
@@ -41,6 +50,9 @@ jest.mock('@clerk/backend/webhooks', () => ({
 import { logger } from '../../../../../src/shared/infrastructure/logger.js';
 import clerkWebhookRoutes from '../../../../../src/modules/webhooks/clerk/routes.js';
 import errorHandlerPlugin from '../../../../../src/shared/plugins/errorHandler.js';
+import { ClerkMetadataProvider } from '../../../../../src/shared/providers/clerkMetadataProvider.js';
+
+const MockClerkMetadataProvider = ClerkMetadataProvider as unknown as jest.Mock;
 
 const mockLogger = logger as unknown as {
   info: jest.Mock;
@@ -174,5 +186,50 @@ describe('clerkWebhookRoutes — valid request (R014)', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { received: boolean };
     expect(body).toEqual({ received: true });
+  });
+});
+
+// T031 — R009: clerkWebhookRoutes wires ClerkMetadataProvider into dispatchClerkEvent
+
+describe('clerkWebhookRoutes — ClerkMetadataProvider wiring (R009)', () => {
+  it('WHEN the route is registered THEN dispatchClerkEvent is called with a ClerkMetadataProvider instance as its fourth argument', async () => {
+    mockVerifyWebhook.mockResolvedValue({ type: 'user.created', data: { id: 'user_001' } });
+    const app = await buildApp();
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      payload: Buffer.from(JSON.stringify({ type: 'user.created', data: {} })),
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': 'msg_001',
+        'svix-timestamp': '1234567890',
+        'svix-signature': 'v1,abc123',
+      },
+    });
+
+    expect(MockClerkMetadataProvider).toHaveBeenCalled();
+    const fourthArg = mockDispatchClerkEvent.mock.calls[0]?.[3] as unknown;
+    expect(fourthArg).toBe(mockMetadataProviderInstance);
+  });
+
+  it('WHEN dispatchClerkEvent rejects (simulating a metadata-write failure) THEN the response is non-2xx', async () => {
+    mockVerifyWebhook.mockResolvedValue({ type: 'user.created', data: { id: 'user_001' } });
+    mockDispatchClerkEvent.mockRejectedValue(new Error('metadata write failed'));
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/clerk',
+      payload: Buffer.from(JSON.stringify({ type: 'user.created', data: {} })),
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': 'msg_001',
+        'svix-timestamp': '1234567890',
+        'svix-signature': 'v1,abc123',
+      },
+    });
+
+    expect(response.statusCode).toBeGreaterThanOrEqual(300);
   });
 });
