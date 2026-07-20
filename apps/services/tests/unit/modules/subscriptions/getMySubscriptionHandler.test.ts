@@ -49,8 +49,10 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-describe('getMySubscriptionHandler — response shape (R011)', () => {
-  it('WHEN use case returns a subscription THEN replies with { subscription }', async () => {
+// This suite executing and passing in full — with no temporal-dead-zone
+// ReferenceError on import/invocation — is the verification for R001.
+describe('getMySubscriptionHandler — response shape (R001)', () => {
+  it('R002: WHEN use case returns a subscription THEN replies with { subscription }', async () => {
     mockExecute.mockResolvedValue(activeSubscription);
 
     const request = makeRequest();
@@ -61,7 +63,7 @@ describe('getMySubscriptionHandler — response shape (R011)', () => {
     expect(reply.send).toHaveBeenCalledWith({ subscription: activeSubscription });
   });
 
-  it('WHEN use case returns null THEN replies with { subscription: null }', async () => {
+  it('R003: WHEN use case returns null THEN replies with { subscription: null }', async () => {
     mockExecute.mockResolvedValue(null);
 
     const request = makeRequest();
@@ -72,7 +74,7 @@ describe('getMySubscriptionHandler — response shape (R011)', () => {
     expect(reply.send).toHaveBeenCalledWith({ subscription: null });
   });
 
-  it('WHEN handler is called THEN passes userId and orgId to use case', async () => {
+  it('R004: WHEN handler is called THEN passes userId and orgId to use case', async () => {
     mockExecute.mockResolvedValue(null);
 
     const request = makeRequest('user-002', 'org-001');
