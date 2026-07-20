@@ -49,14 +49,16 @@ The `onRequest` hook extracts the `Authorization: Bearer <token>` header. When t
 
 `request.userId`/`request.orgId` carry the internal UUID, **not** the Clerk ID — every module that queries or writes FK columns (`subscriptions`, `billing`, `usage_counters`) treats these as opaque UUID strings. The `users` module handlers (`GET /users/me`, `PATCH /users/me`, `POST /users/me/onboarding`) are the one exception: they resolve the caller's row by `request.clerkUserId` instead, since `users` is keyed on `clerk_user_id`.
 
-Two preHandler functions guard routes:
+Two preHandler functions guard routes, both matching Fastify's `(request, reply, done)` preHandler signature:
 
 | PreHandler | Throws | Condition |
 |------------|--------|-----------|
 | `requireAuth` | `UnauthorizedError` (401) | `request.userId` is `undefined` |
-| `requireOrg` | `ForbiddenError` (403) | `request.orgId` is `null` (calls `requireAuth` first) |
+| `requireOrg` | `ForbiddenError` (403) | `request.orgId` is `null` |
 
-`ForbiddenError` extends `DomainError` with `statusCode: 403` and code `FORBIDDEN`. Neither `requireAuth` nor `requireOrg` is registered globally — each route that requires protection attaches the relevant preHandler explicitly.
+`requireOrg` composes on top of `requireAuth` rather than duplicating its check: it calls `requireAuth(request, reply, innerDone)`, where `innerDone` performs the `orgId === null` check and only calls `requireOrg`'s own `done` (the one that signals Fastify to continue the preHandler chain) once the organization check passes. This keeps the two guards in sync — `requireOrg` always inherits `requireAuth`'s authentication check verbatim instead of reimplementing it — and guarantees Fastify is never signaled to proceed before a `ForbiddenError` has had the chance to be thrown.
+
+`ForbiddenError` extends `DomainError` with `statusCode: 403` and code `FORBIDDEN`. Neither `requireAuth` nor `requireOrg` is registered globally — each route that requires protection attaches the relevant preHandler explicitly. `requireOrg` has unit test coverage (`apps/services/tests/unit/shared/plugins/requireOrg.test.ts`) for its three-way guard behavior but, as of this writing, is not attached to any route.
 
 ## Internal identity resolution
 

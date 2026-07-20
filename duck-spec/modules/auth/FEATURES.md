@@ -270,3 +270,34 @@ Hacer que `request.userId` y `request.orgId` contengan los UUIDs internos (`user
 
 - AUTH-001 — modifica el `clerkAuthPlugin` existente y depende de la infra de verificación de JWT
 - AUTH-002 — modifica los webhooks `user.created` y `organization.created`, y depende del schema `users` / `organizations`
+
+---
+
+## AUTH-006 — Corregir la composición de `requireOrg` sobre `requireAuth`
+
+**Estado:** DONE
+
+### Contexto
+
+El guard `requireAuth` (en `apps/services/src/shared/plugins/requireAuth.ts`) se usa como `preHandler` de Fastify en todas las rutas autenticadas (`{ preHandler: requireAuth }`), por lo que su firma es `(request, reply, done)`. El guard `requireOrg`, que compone sobre `requireAuth` para exigir además scope de organización, quedó desactualizado: sigue invocando `requireAuth(request)` con un solo argumento. Esto rompe la compilación del backend con un error `TS2554` (número de argumentos incorrecto). El error es pre-existente y no fue introducido por AUTH-005.
+
+### Objetivo
+
+Restaurar la compilación del backend (`tsc`) corrigiendo la forma en que `requireOrg` compone con `requireAuth`, preservando la semántica de guard: exigir usuario autenticado y, además, scope de organización presente.
+
+### Requerimientos funcionales
+
+- El build del backend (`tsc`) compila sin el error `TS2554`
+- `requireOrg` rechaza como *no autorizado* los requests que no tienen un usuario autenticado
+- `requireOrg` rechaza como *prohibido* los requests autenticados que no tienen una organización asociada
+- `requireOrg` permite continuar los requests autenticados que sí tienen una organización asociada
+
+### Fuera de scope
+
+- Cambiar el comportamiento o la firma de `requireAuth`
+- Cambiar qué rutas usan `requireAuth` vs. `requireOrg`
+- Agregar nuevas rutas o wiring de `requireOrg` a endpoints que hoy no lo usan
+
+### Requerimientos no funcionales
+
+- El guard no debe agregar latencia perceptible respecto del baseline actual (sigue siendo una verificación en memoria sobre el request decorado)
