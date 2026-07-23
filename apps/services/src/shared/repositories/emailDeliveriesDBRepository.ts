@@ -84,6 +84,21 @@ export class EmailDeliveriesDBRepository implements IEmailDeliveriesRepository {
     logger.info({ duration: Date.now() - start }, 'EmailDeliveriesDBRepository.markSent');
   }
 
+  // R004: short-circuit a suppressed recipient's send before the provider is ever called; guarded
+  // by `WHERE state = 'queued'` so a redelivered queue message is a harmless no-op.
+  async markSuppressed(id: string): Promise<void> {
+    const start = Date.now();
+    await this.guarded('markSuppressed', { id }, async () => {
+      await this.sql`
+        UPDATE email_deliveries
+        SET state = 'suppressed'
+        WHERE id = ${id}
+          AND state = 'queued'
+      `;
+    });
+    logger.info({ duration: Date.now() - start }, 'EmailDeliveriesDBRepository.markSuppressed');
+  }
+
   // R003, NF001, EC001, EC002, EC004: guarded UPDATE keyed on provider_message_id; a follow-up
   // SELECT distinguishes not_found from already_terminal purely for the log line.
   async applyDeliveryEventByProviderMessageId(

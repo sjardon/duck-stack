@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { notificationsConfig } from '../../../shared/configs/notificationsConfig.js';
 import { db } from '../../../shared/infrastructure/db.js';
 import { EmailDeliveriesDBRepository } from '../../../shared/repositories/emailDeliveriesDBRepository.js';
+import { EmailSuppressionsDBRepository } from '../../../shared/repositories/emailSuppressionsDBRepository.js';
 import type { IEmailDeliveriesRepository } from '../../../shared/repositories/interfaces/iEmailDeliveriesRepository.js';
+import type { IEmailSuppressionsRepository } from '../../../shared/repositories/interfaces/iEmailSuppressionsRepository.js';
 import { UnauthorizedError, ValidationError } from '../../../shared/errors.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 import { SnsNotificationSchema, type SnsNotificationDto } from './dtos/snsNotificationSchema.js';
@@ -58,10 +60,11 @@ async function confirmSubscription(validated: SnsNotificationDto): Promise<void>
 async function processNotification(
   validated: SnsNotificationDto,
   repository: IEmailDeliveriesRepository,
+  suppressions: IEmailSuppressionsRepository,
 ): Promise<void> {
   try {
     const innerEvent = SesEventSchema.parse(JSON.parse(validated.Message));
-    await dispatchSesEvent(innerEvent, repository);
+    await dispatchSesEvent(innerEvent, repository, suppressions);
   } catch (err) {
     // EC002/EC004-adjacent: malformed inner content is logged and discarded, never an error response.
     logger.warn({ err }, 'sesEventsWebhookRoutes: failed to process inner SES event');
@@ -79,6 +82,7 @@ export default async function sesEventsWebhookRoutes(fastify: FastifyInstance) {
   }
 
   const repository = new EmailDeliveriesDBRepository(db);
+  const suppressions = new EmailSuppressionsDBRepository(db);
 
   // SNS posts with Content-Type: text/plain, not application/json — capture the raw body as a
   // Buffer so it can be parsed after signature verification. Scoped to this plugin only.
@@ -97,7 +101,7 @@ export default async function sesEventsWebhookRoutes(fastify: FastifyInstance) {
     }
 
     if (validated.Type === 'Notification') {
-      await processNotification(validated, repository);
+      await processNotification(validated, repository, suppressions);
     }
 
     // R003, EC001, EC002, EC004: always reply 200 for authenticated notifications, regardless

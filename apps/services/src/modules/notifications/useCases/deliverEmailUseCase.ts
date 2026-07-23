@@ -4,11 +4,13 @@ import { emailTemplateRegistry } from '../templates/emailTemplateRegistry.js';
 import type { EmailSendMessage } from '../entities/emailSendMessage.js';
 import type { IEmailSender } from '../providers/interfaces/iEmailSender.js';
 import type { IEmailDeliveriesRepository } from '../../../shared/repositories/interfaces/iEmailDeliveriesRepository.js';
+import type { IEmailSuppressionsRepository } from '../../../shared/repositories/interfaces/iEmailSuppressionsRepository.js';
 
 export class DeliverEmailUseCase {
   constructor(
     private readonly sender: IEmailSender,
     private readonly deliveries: IEmailDeliveriesRepository,
+    private readonly suppressions: IEmailSuppressionsRepository,
   ) {}
 
   async execute(message: EmailSendMessage): Promise<void> {
@@ -27,7 +29,19 @@ export class DeliverEmailUseCase {
     return existing?.providerMessageId != null;
   }
 
+  // R003, R004, EC002, EC004: checked at dispatch/processing time (not enqueue time), so an
+  // address suppressed after this message was published is still caught here; each message has
+  // its own sendId/row, so concurrent sends to the same address each resolve independently.
+  private async isSuppressedRecipient(message: EmailSendMessage): Promise<boolean> {
+    if (!(await this.suppressions.isSuppressed(message.to))) return false;
+
+    await this.deliveries.markSuppressed(message.sendId);
+    return true;
+  }
+
   private async dispatch(message: EmailSendMessage): Promise<void> {
+    if (await this.isSuppressedRecipient(message)) return;
+
     const template = emailTemplateRegistry[message.templateId];
 
     try {

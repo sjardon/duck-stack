@@ -86,6 +86,31 @@ describe('EmailDeliveriesDBRepository.markSent', () => {
   });
 });
 
+// T009 — R004: markSuppressed transitions a queued record to the suppressed state
+describe('EmailDeliveriesDBRepository.markSuppressed', () => {
+  it("WHEN called THEN issues an UPDATE setting state = 'suppressed' guarded by state = 'queued' and the given id", async () => {
+    const { sql, mockFn } = makeSqlMock([]);
+    const repo = new EmailDeliveriesDBRepository(sql as never);
+
+    await repo.markSuppressed('send-001');
+
+    expect(mockFn).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = mockFn.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const queryText = strings.join('?');
+    expect(queryText).toMatch(/UPDATE\s+email_deliveries/i);
+    expect(queryText).toMatch(/state\s*=\s*'suppressed'/i);
+    expect(queryText).toMatch(/state\s*=\s*'queued'/i);
+    expect(values).toContain('send-001');
+  });
+
+  it('WHEN the guard excludes every row (0 rows affected) THEN resolves without error', async () => {
+    const { sql } = makeSqlMock([]);
+    const repo = new EmailDeliveriesDBRepository(sql as never);
+
+    await expect(repo.markSuppressed('send-001')).resolves.toBeUndefined();
+  });
+});
+
 // T009 — R003, NF001, EC001, EC002, EC004: applyDeliveryEventByProviderMessageId outcome discrimination
 describe('EmailDeliveriesDBRepository.applyDeliveryEventByProviderMessageId', () => {
   it('WHEN a matching non-terminal row exists THEN updates state and returns "applied"', async () => {

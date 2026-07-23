@@ -6,6 +6,21 @@ export const SesEventSchema = z
   .object({
     eventType: z.string(),
     mail: z.object({ messageId: z.string() }).passthrough(),
+    // R002, EC001: bounceType discriminates permanent vs. transient bounces; only the recipient
+    // addresses are needed to feed the suppression list.
+    bounce: z
+      .object({
+        bounceType: z.string().optional(),
+        bouncedRecipients: z.array(z.object({ emailAddress: z.string() }).passthrough()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    complaint: z
+      .object({
+        complainedRecipients: z.array(z.object({ emailAddress: z.string() }).passthrough()).optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 

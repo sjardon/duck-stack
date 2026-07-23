@@ -26,11 +26,21 @@ jest.mock('../../../../../src/shared/repositories/emailDeliveriesDBRepository.js
     findById: jest.fn(),
     recordProviderMessageId: jest.fn(),
     markSent: jest.fn(),
+    markSuppressed: jest.fn(),
     applyDeliveryEventByProviderMessageId: jest.fn(),
   })),
 }));
 
+jest.mock('../../../../../src/shared/repositories/emailSuppressionsDBRepository.js', () => ({
+  EmailSuppressionsDBRepository: jest.fn().mockImplementation(function (this: { upsert: jest.Mock; isSuppressed: jest.Mock }) {
+    this.upsert = jest.fn();
+    this.isSuppressed = jest.fn();
+  }),
+}));
+
 import { processMessage } from '../../../../../src/modules/notifications/worker/emailWorker.js';
+import { DeliverEmailUseCase } from '../../../../../src/modules/notifications/useCases/deliverEmailUseCase.js';
+import { EmailSuppressionsDBRepository } from '../../../../../src/shared/repositories/emailSuppressionsDBRepository.js';
 
 notificationsConfig.emailQueueUrl = 'https://sqs.example/queue';
 notificationsConfig.emailDeadLetterQueueUrl = 'https://sqs.example/dlq';
@@ -117,6 +127,19 @@ describe('processMessage — transient failure (T023, R005, R007, NF002)', () =>
     expect(typeof loggedFields.duration).toBe('number');
 
     expect(sqsClient.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('processMessage — suppression repository wiring (T017, R003)', () => {
+  it('WHEN processMessage runs THEN DeliverEmailUseCase is constructed with an EmailSuppressionsDBRepository instance as its third argument', async () => {
+    mockExecute.mockResolvedValue(undefined);
+    const sqsClient = makeSqsClient();
+
+    await processMessage(sqsClient, makeRawMessage(JSON.stringify(validEnvelope)));
+
+    expect(DeliverEmailUseCase).toHaveBeenCalledTimes(1);
+    const constructorArgs = (DeliverEmailUseCase as unknown as jest.Mock).mock.calls[0];
+    expect(constructorArgs[2]).toBeInstanceOf(EmailSuppressionsDBRepository);
   });
 });
 

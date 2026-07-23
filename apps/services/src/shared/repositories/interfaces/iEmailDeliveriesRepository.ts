@@ -1,4 +1,11 @@
-export type EmailDeliveryState = 'queued' | 'sent' | 'delivered' | 'bounced' | 'complained' | 'failed';
+export type EmailDeliveryState =
+  | 'queued'
+  | 'sent'
+  | 'delivered'
+  | 'bounced'
+  | 'complained'
+  | 'failed'
+  | 'suppressed';
 export type TerminalEmailDeliveryState = 'delivered' | 'bounced' | 'complained' | 'failed';
 export type ApplyDeliveryEventOutcome = 'applied' | 'not_found' | 'already_terminal';
 
@@ -13,6 +20,7 @@ export interface IEmailDeliveriesRepository {
   findById(id: string): Promise<EmailDeliveryRecord | null>;
   recordProviderMessageId(id: string, providerMessageId: string): Promise<void>;
   markSent(id: string): Promise<void>;
+  markSuppressed(id: string): Promise<void>;
   applyDeliveryEventByProviderMessageId(
     providerMessageId: string,
     state: TerminalEmailDeliveryState,
