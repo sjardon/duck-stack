@@ -15,9 +15,9 @@ const PERMANENT_SES_ERROR_NAMES = new Set([
 export class SesEmailSender implements IEmailSender {
   constructor(private readonly sesClient: SESClient) {}
 
-  async send(message: EmailMessage): Promise<void> {
+  async send(message: EmailMessage): Promise<{ providerMessageId: string }> {
     try {
-      await this.sesClient.send(
+      const response = await this.sesClient.send(
         new SendEmailCommand({
           Source: notificationsConfig.sesFromAddress,
           Destination: { ToAddresses: [message.to] },
@@ -25,8 +25,12 @@ export class SesEmailSender implements IEmailSender {
             Subject: { Data: message.subject },
             Body: { Html: { Data: message.html } },
           },
+          // R002/R003: required for SES to publish any delivery-event notification to SNS at all.
+          ConfigurationSetName: notificationsConfig.sesConfigurationSetName,
         }),
       );
+
+      return { providerMessageId: response.MessageId! };
     } catch (err) {
       const name = err instanceof Error ? err.name : undefined;
 

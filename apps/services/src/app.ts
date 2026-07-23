@@ -8,6 +8,7 @@ import clerkAuthPlugin from './shared/plugins/clerkAuthPlugin.js';
 import healthRoutes from './modules/health/routes.js';
 import clerkWebhookRoutes from './modules/webhooks/clerk/routes.js';
 import mobbexWebhookRoutes from './modules/webhooks/mobbex/routes.js';
+import sesEventsWebhookRoutes from './modules/webhooks/ses/routes.js';
 import usersRoutes from './modules/users/routes.js';
 import billingRoutes from './modules/billing/routes.js';
 import subscriptionsRoutes from './modules/subscriptions/routes.js';
@@ -41,6 +42,7 @@ export async function createApp(): Promise<FastifyInstance> {
   await fastify.register(helmetPlugin);
   await fastify.register(mobbexWebhookRoutes);
   await fastify.register(clerkWebhookRoutes);
+  await fastify.register(sesEventsWebhookRoutes);
   await fastify.register(clerkAuthPlugin);
 
   // R008, EC005: global trial-expiry guard registered after clerkAuthPlugin

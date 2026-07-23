@@ -6,4 +6,6 @@ export const notificationsConfig = {
   emailDeadLetterQueueUrl: env.NOTIFICATIONS_EMAIL_DLQ_URL ?? '',
   sesFromAddress: env.NOTIFICATIONS_SES_FROM_ADDRESS ?? '',
   sqsPollWaitTimeSeconds: parseInt(env.NOTIFICATIONS_SQS_POLL_WAIT_SECONDS ?? '20', 10),
+  sesConfigurationSetName: env.NOTIFICATIONS_SES_CONFIGURATION_SET_NAME ?? '',
+  sesEventsTopicArn: env.NOTIFICATIONS_SES_EVENTS_TOPIC_ARN ?? '',
 };
