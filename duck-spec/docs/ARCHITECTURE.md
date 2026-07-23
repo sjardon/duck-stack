@@ -27,6 +27,7 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | `apps/web` | Vite + React + TypeScript, React Query, Zustand | Main SPA for authenticated users |
 | `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
 | `apps/services` | Fastify + TypeScript | Backend API. Containerised; deployed to AWS App Runner via ECR. |
+| `apps/services` worker | Node.js + TypeScript (`src/worker.ts`) | Standalone background worker process (notifications email delivery). Deployable and scalable independently of the API; shares the `apps/services` codebase and config but has its own entrypoint and no HTTP listener. |
 
 ## External integrations
 
@@ -35,6 +36,8 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | Clerk | `apps/web`, `apps/services` | End-to-end identity provider. `apps/web` manages user sessions via `@clerk/clerk-react`. `apps/services` verifies Clerk JWTs locally via `@clerk/backend` (JWKS cached at startup; no per-request Clerk API call for verification). Clerk also delivers lifecycle events (user and organization create/update) to `apps/services` via webhook. `apps/services` writes back to Clerk on the `user.created`/`organization.created` webhook (and, as a lazy fallback, from `clerkAuthPlugin`) via `clerkClient.users.updateUserMetadata`/`organizations.updateOrganizationMetadata`, storing the internal `users.id`/`organizations.id` UUID in `private_metadata` so it is available as a custom JWT claim (`app_user_id`/`app_org_id`) on subsequent requests. |
 | Supabase | `apps/services` | Relational database. `apps/services` connects via `postgres.js` over a direct TCP connection using `DATABASE_URL`. Schema migrations are managed with the Supabase CLI under `apps/services/supabase/migrations/`. |
 | Mobbex | `apps/services` | Payment provider (Argentina/LATAM market). Accessed exclusively through the `PaymentProvider` port defined in `@repo/types`; the `MobbexProvider` adapter in `apps/services/src/modules/billing/providers/` is the only concrete implementation. No other module imports from the adapter directly. |
+| AWS SQS | `apps/services` | Transactional-email async delivery queue. The API enqueues via `SqsEmailNotifier` (`modules/notifications/providers/`); the standalone worker process long-polls the same queue and forwards permanent-error messages to a dedicated dead-letter queue. Transient retries and DLQ overflow past the DLQ forward are handled by the queue's own redrive policy (external infrastructure, not Terraform-managed by this repo yet). |
+| AWS SES | `apps/services` worker | Transactional email provider. Accessed exclusively through the `IEmailSender` port; `SesEmailSender` (`modules/notifications/providers/`) is the only concrete implementation and is called only by the worker, never by the API request path. |
 
 ## Inter-service communication
 
