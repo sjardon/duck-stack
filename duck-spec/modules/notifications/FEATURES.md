@@ -6,7 +6,7 @@ Módulo de notificaciones del producto. Provee una interfaz abstracta para que c
 
 ## NOTIFICATIONS-001 — Email Core: Port, SES Adapter, Async Delivery
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
