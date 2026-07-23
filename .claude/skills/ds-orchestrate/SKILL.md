@@ -22,8 +22,9 @@ Every agent invocation receives and returns this JSON object. You are responsibl
   "featureId": "AUTH-001",
   "branch": "feature/auth-001-short-desc",
   "effort": "low|medium|high",
-  "lastStep": "branch|analysis|design|implement|review|docs|integrate",
-  "pendingFixes": []
+  "lastStep": "branch|analysis|design|implement-test|implement-code|implement-refactor|review|docs|integrate",
+  "pendingFixes": [],
+  "phase": null
 }
 ```
 
@@ -34,6 +35,7 @@ Every agent invocation receives and returns this JSON object. You are responsibl
 | `effort` | ds-analysis-agent | Effort level. Determines whether design evaluates more solutions. |
 | `lastStep` | you | Last successfully completed step. Allows resuming a failed run. |
 | `pendingFixes` | ds-review-agent | Findings that must be fixed. Passed to ds-implement-agent on retry. Cleared on pass. |
+| `phase` | you (Step 4 only) | Which task type ds-implement-agent should execute for that call: `"test"` \| `"implement"` \| `"refactor"`. Set before each of the three Step 4 sub-calls; `null` everywhere else. |
 
 ## Mandatory checklist
 
@@ -43,7 +45,9 @@ Output this checklist after each step and mark `[x]` as steps complete:
 [ ] 1. Branch created
 [ ] 2. Analysis completed — analysis.md generated, effort set
 [ ] 3. Design completed — design.md + tasks.md generated
-[ ] 4. Implementation completed
+[ ] 4a. Tests written — all `test`-type tasks implemented
+[ ] 4b. Implementation completed — all `implement`-type tasks implemented
+[ ] 4c. Refactor completed — all `refactor`-type tasks implemented (if any)
 [ ] 5. Review passed
 [ ] 6. Docs updated
 [ ] 7. MR created
@@ -88,20 +92,38 @@ Do NOT proceed until both files exist.
 
 Update `lastStep` to `"design"`.
 
-### Step 4 — Implementation (MANDATORY)
+### Step 4 — Implementation (MANDATORY, three phases)
 
-Invoke: **ds-implement-agent**
+Invoke **ds-implement-agent** three times in sequence — once per task type in tasks.md (`test` → `implement` → `refactor`). Each call is scoped to only its own task type via the `phase` field; do not let one call touch tasks belonging to another phase.
 
-Pass the current context. ds-implement-agent reads `analysis.md`, `design.md`, and `tasks.md` and implements all tasks.
+#### Step 4a — Test generation
 
-ds-implement-agent returns:
+Set `phase` to `"test"` and pass the context. ds-implement-agent writes the failing acceptance test for every `test`-type task in tasks.md. Tests are expected to fail at this point — that is correct, not an error.
+
+Update `lastStep` to `"implement-test"`.
+
+#### Step 4b — Implementation
+
+Set `phase` to `"implement"` and pass the context. ds-implement-agent writes the production code for every `implement`-type task, making the tests from Step 4a pass.
+
+Update `lastStep` to `"implement-code"`.
+
+#### Step 4c — Refactor
+
+Set `phase` to `"refactor"` and pass the context. ds-implement-agent cleans up every `refactor`-type task without changing behavior. If tasks.md has no `refactor`-type tasks, this call is a no-op — still invoke it so `status` is confirmed rather than assumed.
+
+Update `lastStep` to `"implement-refactor"`.
+
+---
+
+Each of the three calls returns:
 ```json
 { "status": "success|failure", "error": "<detail if failure, otherwise null>" }
 ```
 
-If `status` is `"failure"`: STOP and notify the user. Do NOT continue.
+If `status` is `"failure"` on any of the three calls: STOP and notify the user. Do NOT continue to the next phase, and do NOT proceed to Step 5.
 
-Update `lastStep` to `"implement"`.
+Set `phase` back to `null` in the context once all three phases succeed and before invoking Step 5.
 
 ### Step 5 — Review (MANDATORY, with retry)
 
@@ -126,7 +148,7 @@ ds-review-agent returns:
 
 **If `status` is `"fail"`**:
 - Set `pendingFixes` to the `findings` array from the response
-- Re-invoke **ds-implement-agent** passing the updated context (with `pendingFixes` populated)
+- Re-invoke **ds-implement-agent** passing the updated context (with `pendingFixes` populated and `phase` left `null` — retries fix the reported findings directly, they do not repeat the three-phase test/implement/refactor sequence)
 - Re-invoke **ds-review-agent** after each implementation retry
 - Maximum **3 retries** total
 - If still failing after 3 retries: STOP and report all findings to the user. Do NOT proceed to Step 6.
@@ -157,5 +179,5 @@ Update `lastStep` to `"integrate"`.
 - Never skip a step, even if it seems unnecessary.
 - Never implement anything or do the work yourself — coordinate only.
 - Always pass the full context object to each agent and update it with the returned values before the next invocation.
-- If the user resumes a failed run, read `lastStep` from the context and skip already-completed steps.
+- If the user resumes a failed run, read `lastStep` from the context and skip already-completed steps. `lastStep` values `"implement-test"`, `"implement-code"`, and `"implement-refactor"` resume mid-Step-4 at the next un-run sub-step (e.g. `"implement-test"` resumes at Step 4b, not Step 4a).
 - Errors from agents must be surfaced to the user verbatim before stopping.

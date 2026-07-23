@@ -1,11 +1,11 @@
 ---
 name: ds-implement
-description: Reads analysis.md, design.md, and tasks.md and implements all pending tasks. On retry, receives pendingFixes from ds-review and only addresses those findings. Sets lastStep to "implement". Use when design.md and tasks.md exist and code needs to be written, or when pendingFixes from ds-review require resolution.
+description: Reads analysis.md, design.md, and tasks.md and implements tasks matching the given phase (test, implement, or refactor) — the orchestrator calls this three times, once per phase. On retry, receives pendingFixes from ds-review and only addresses those findings, ignoring phase. Sets lastStep to "implement-test", "implement-code", or "implement-refactor". Use when design.md and tasks.md exist and code for one phase needs to be written, or when pendingFixes from ds-review require resolution.
 ---
 
 # Duck-Spec Implement
 
-You implement the code changes for a feature. You receive a shared context object and return it updated after completing all tasks.
+You implement the code changes for one phase (`test`, `implement`, or `refactor`) of a feature. You receive a shared context object and return it updated after completing every task in tasks.md that matches the requested phase.
 
 ## Input
 
@@ -14,18 +14,21 @@ You implement the code changes for a feature. You receive a shared context objec
   "featureId": "AUTH-001",
   "branch": "feature/auth-001-short-desc",
   "effort": "low|medium|high",
-  "lastStep": "design|review",
-  "pendingFixes": []
+  "lastStep": "design|implement-test|implement-code|review",
+  "pendingFixes": [],
+  "phase": "test|implement|refactor"
 }
 ```
 
 `pendingFixes` is empty on the first run. On retry it contains findings from ds-review that must be resolved.
 
+`phase` is set on first-run invocations — the orchestrator calls this skill three times (once per `phase`), and each call is scoped to only the tasks.md entries whose `type` matches `phase`. `phase` is `null`/absent on retry invocations (`pendingFixes` non-empty) — retries fix specific findings directly and are not scoped by phase.
+
 The orchestrator also provides `module` — the module name matching a directory under `duck-spec/modules/`.
 
 ---
 
-## First run (`pendingFixes` is empty)
+## First run (`phase` is set, `pendingFixes` is empty)
 
 ### 1. Read the three artifacts
 
@@ -34,6 +37,15 @@ Read all three files before writing any code:
 - `duck-spec/modules/<module>/<feature-dir>/analysis.md` — requirements (R-IDs, NF-IDs, EC-IDs) and constraints
 - `duck-spec/modules/<module>/<feature-dir>/design.md` — chosen solution, technical design, files list, requirement coverage
 - `duck-spec/modules/<module>/<feature-dir>/tasks.md` — ordered task list (T-IDs) with covered R-IDs and function-level descriptions
+
+### 1a. Filter tasks by phase
+
+Filter tasks.md down to only the tasks whose `type` matches `phase`:
+- `phase: "test"` → only `type: test` tasks
+- `phase: "implement"` → only `type: implement` tasks
+- `phase: "refactor"` → only `type: refactor` tasks — if none exist for this feature, return success immediately with `addressedRIds: []` and do not invent refactor work
+
+Preserve tasks.md's existing relative order within the filtered set. Tasks of other types are out of scope for this invocation — do not read ahead into them or act on them, even if doing so seems more efficient.
 
 ### 2. Reading existing code (discipline)
 
@@ -45,26 +57,27 @@ Use the `Files` section of design.md as your map. For each file you must MODIFY,
 
 Files marked CREATE do not need to be read — they do not yet exist.
 
-### 3. Implement tasks in order
+### 3. Implement the filtered tasks in order
 
-Work through every task in tasks.md in listed order. Tasks are grouped by R-ID in test→implement→refactor sequence.
+Work through every task selected in step 1a, in listed order. Do only the work matching `phase` — the other two task types are handled by separate invocations of this skill:
 
-For each task:
-- `type: test` — write the acceptance test file. Express the EARS statement as a failing case (production code does not exist yet). Do not run the test yet.
-- `type: implement` — write the production code that makes the preceding test pass. Implement exactly what the task describes — no more, no less.
-- `type: refactor` — clean up the implementation without changing behavior. Only present when ds-design included it.
+- `phase: "test"` — for each `type: test` task, write the acceptance test file. Express the EARS statement as a failing case (production code does not exist yet). Do not run the test yet, and do not write any production code.
+- `phase: "implement"` — for each `type: implement` task, write the production code that makes the corresponding test(s) from the prior phase pass. Implement exactly what the task describes — no more, no less. Do not modify the test files written in the test phase.
+- `phase: "refactor"` — for each `type: refactor` task, clean up the implementation without changing behavior. Only tasks present in tasks.md — never invent refactor work beyond what ds-design specified.
 
 **Constraints from analysis.md are hard limits** — do not implement anything that would violate a technical constraint or an out-of-scope item.
 
 ### 4. Verify task completion
 
-After implementing all tasks, verify:
-- Every file listed under `Files` in design.md has been created or modified as specified
-- Every T-ID in tasks.md has been addressed
+After implementing the filtered tasks, verify:
+- Every file listed under `Files` in design.md relevant to this phase's tasks has been created or modified as specified
+- Every T-ID selected in step 1a has been addressed
+
+Do not check tasks belonging to other phases — they are out of scope for this invocation and will be verified in their own call.
 
 ---
 
-## Retry run (`pendingFixes` is non-empty)
+## Retry run (`pendingFixes` is non-empty, `phase` is `null`)
 
 `pendingFixes` contains findings from ds-review with this shape:
 
@@ -113,22 +126,27 @@ Do not make changes beyond what is needed to resolve the reported findings.
   "featureId": "AUTH-001",
   "branch": "feature/auth-001-short-desc",
   "effort": "low|medium|high",
-  "lastStep": "implement",
+  "lastStep": "implement-test|implement-code|implement-refactor|implement",
   "pendingFixes": [],
+  "phase": null,
   "result": {
     "status": "success|failure",
+    "phase": "test|implement|refactor|null",
     "addressedRIds": ["R003"],
     "error": null
   }
 }
 ```
 
-`addressedRIds` lists the R-IDs fixed during a retry run (empty array on first run). Always clear `pendingFixes` in the returned context — ds-review will repopulate it if new findings remain.
+`result.phase` mirrors the input `phase` (`null` on retry runs). Derive `lastStep` from it: `phase: "test"` → `"implement-test"`, `phase: "implement"` → `"implement-code"`, `phase: "refactor"` → `"implement-refactor"`; on a retry run (`phase` absent) leave `lastStep` as `"implement"`. Always reset `phase` to `null` in the returned context — the orchestrator sets it fresh before each of the three phase calls.
+
+`addressedRIds` lists the R-IDs fixed during a retry run (empty array on first run) or covered by the filtered tasks during a phase run.
 
 ## Rules
 
 - Never modify analysis.md, design.md, or tasks.md.
 - Never implement anything not described in tasks.md or required to fix a finding in pendingFixes.
+- On a phase run, never touch tasks whose `type` doesn't match `phase` — even if finishing them now looks more efficient, they belong to a separate invocation.
 - Never delete or skip tests to resolve a `test` finding — fix the implementation.
 - Never violate technical constraints or implement out-of-scope items from analysis.md.
 - Always return the full context object, not just the result field.

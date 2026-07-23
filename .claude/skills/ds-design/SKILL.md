@@ -132,7 +132,7 @@ Using the template in `tasks.template.md`, create one task per atomic, function-
 **ATDD ordering rule:** for each R-ID, generate tasks in this sequence:
 1. `test` task — write the acceptance test for the R-ID (test file in `tests/` of the relevant app, following the same project structure as the code being tested)
 2. `implement` task — implement the production code
-3. `refactor` task (optional) — only when the design calls for a non-trivial cleanup step
+3. `refactor` task — refactor for well structured, maintainable code
 
 Tasks must also be ordered by dependency: if T002 depends on T001, T002 comes after it.
 
