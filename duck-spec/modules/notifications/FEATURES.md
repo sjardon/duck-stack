@@ -138,7 +138,7 @@ Persistir cada solicitud de envío y su estado final (delivered / bounced / comp
 
 ## NOTIFICATIONS-003 — Email Suppression List
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

@@ -39,6 +39,14 @@ export class FakeEmailDeliveriesRepository implements IEmailDeliveriesRepository
     record.state = 'sent';
   }
 
+  async markSuppressed(id: string): Promise<void> {
+    const record = this.recordsById.get(id);
+    if (!record || record.state !== 'queued') {
+      return;
+    }
+    record.state = 'suppressed';
+  }
+
   async applyDeliveryEventByProviderMessageId(
     providerMessageId: string,
     state: TerminalEmailDeliveryState,

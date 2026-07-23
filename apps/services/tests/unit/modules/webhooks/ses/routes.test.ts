@@ -36,8 +36,17 @@ jest.mock('../../../../../src/shared/repositories/emailDeliveriesDBRepository.js
     findById: jest.fn(),
     recordProviderMessageId: jest.fn(),
     markSent: jest.fn(),
+    markSuppressed: jest.fn(),
     applyDeliveryEventByProviderMessageId: jest.fn().mockResolvedValue('applied'),
   })),
+}));
+
+// Mock EmailSuppressionsDBRepository so the route can be constructed without a real db
+jest.mock('../../../../../src/shared/repositories/emailSuppressionsDBRepository.js', () => ({
+  EmailSuppressionsDBRepository: jest.fn().mockImplementation(function (this: { upsert: jest.Mock; isSuppressed: jest.Mock }) {
+    this.upsert = jest.fn();
+    this.isSuppressed = jest.fn();
+  }),
 }));
 
 // Mock validateSnsMessage
@@ -53,6 +62,7 @@ jest.mock('../../../../../src/modules/webhooks/ses/sesEventHandlers.js', () => (
 }));
 
 import sesEventsWebhookRoutes from '../../../../../src/modules/webhooks/ses/routes.js';
+import { EmailSuppressionsDBRepository } from '../../../../../src/shared/repositories/emailSuppressionsDBRepository.js';
 
 const TOPIC_ARN = 'arn:aws:sns:us-east-1:123456789012:ses-events';
 
@@ -164,7 +174,27 @@ describe('sesEventsWebhookRoutes — Notification dispatch always replies 200', 
       expect(mockDispatchSesEvent).toHaveBeenCalledWith(
         expect.objectContaining(innerEvent),
         expect.anything(),
+        expect.anything(),
       );
     },
   );
+});
+
+// T025 — R002: sesEventsWebhookRoutes wires EmailSuppressionsDBRepository into dispatchSesEvent
+describe('sesEventsWebhookRoutes — suppressions repository wiring (R002)', () => {
+  it('WHEN a Notification is processed THEN dispatchSesEvent is called with an EmailSuppressionsDBRepository instance as an additional argument', async () => {
+    const app = await buildApp();
+    const innerEvent = { eventType: 'Delivery', mail: { messageId: 'ses-msg-1' } };
+    const envelope = makeNotificationEnvelope({ Message: JSON.stringify(innerEvent) });
+    mockValidateSnsMessage.mockImplementation(async () => envelope);
+
+    const response = await post(app, envelope);
+
+    expect(response.statusCode).toBe(200);
+    expect(mockDispatchSesEvent).toHaveBeenCalledWith(
+      expect.objectContaining(innerEvent),
+      expect.anything(),
+      expect.any(EmailSuppressionsDBRepository),
+    );
+  });
 });
