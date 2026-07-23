@@ -13,6 +13,8 @@ import { ProviderError } from '../../../shared/errors.js';
 import { EmailSendMessageSchema } from '../dtos/emailSendMessageSchema.js';
 import { SesEmailSender } from '../providers/sesEmailSender.js';
 import { DeliverEmailUseCase } from '../useCases/deliverEmailUseCase.js';
+import { db } from '../../../shared/infrastructure/db.js';
+import { EmailDeliveriesDBRepository } from '../../../shared/repositories/emailDeliveriesDBRepository.js';
 import type { EmailSendMessage } from '../entities/emailSendMessage.js';
 
 type ParseResult =
@@ -59,7 +61,8 @@ export async function processMessage(sqsClient: SQSClient, rawMessage: Message):
 
   await requestContext.run({ requestId: message.requestId }, async () => {
     const sender = new SesEmailSender(new SESClient({ region: notificationsConfig.awsRegion }));
-    const useCase = new DeliverEmailUseCase(sender);
+    const deliveries = new EmailDeliveriesDBRepository(db);
+    const useCase = new DeliverEmailUseCase(sender, deliveries);
 
     const startedAt = Date.now();
     const baseLog = { requestId: message.requestId, userId: message.userId, templateId: message.templateId };

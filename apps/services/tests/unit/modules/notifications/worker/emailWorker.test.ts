@@ -18,6 +18,18 @@ jest.mock('../../../../../src/modules/notifications/useCases/deliverEmailUseCase
   DeliverEmailUseCase: jest.fn().mockImplementation(() => ({ execute: mockExecute })),
 }));
 
+jest.mock('../../../../../src/shared/infrastructure/db.js', () => ({ db: {} }));
+
+jest.mock('../../../../../src/shared/repositories/emailDeliveriesDBRepository.js', () => ({
+  EmailDeliveriesDBRepository: jest.fn().mockImplementation(() => ({
+    createQueued: jest.fn(),
+    findById: jest.fn(),
+    recordProviderMessageId: jest.fn(),
+    markSent: jest.fn(),
+    applyDeliveryEventByProviderMessageId: jest.fn(),
+  })),
+}));
+
 import { processMessage } from '../../../../../src/modules/notifications/worker/emailWorker.js';
 
 notificationsConfig.emailQueueUrl = 'https://sqs.example/queue';
@@ -32,6 +44,7 @@ function makeRawMessage(body: string): Message {
 }
 
 const validEnvelope = {
+  sendId: 'send-1',
   requestId: 'req-1',
   templateId: 'example.ping',
   variables: { recipientName: 'Ada', sentAt: '2026-07-22T00:00:00.000Z' },

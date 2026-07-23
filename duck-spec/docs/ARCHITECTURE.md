@@ -38,6 +38,7 @@ pnpm workspace monorepo orchestrated by Turborepo.
 | Mobbex | `apps/services` | Payment provider (Argentina/LATAM market). Accessed exclusively through the `PaymentProvider` port defined in `@repo/types`; the `MobbexProvider` adapter in `apps/services/src/modules/billing/providers/` is the only concrete implementation. No other module imports from the adapter directly. |
 | AWS SQS | `apps/services` | Transactional-email async delivery queue. The API enqueues via `SqsEmailNotifier` (`modules/notifications/providers/`); the standalone worker process long-polls the same queue and forwards permanent-error messages to a dedicated dead-letter queue. Transient retries and DLQ overflow past the DLQ forward are handled by the queue's own redrive policy (external infrastructure, not Terraform-managed by this repo yet). |
 | AWS SES | `apps/services` worker | Transactional email provider. Accessed exclusively through the `IEmailSender` port; `SesEmailSender` (`modules/notifications/providers/`) is the only concrete implementation and is called only by the worker, never by the API request path. |
+| AWS SNS | `apps/services` | Delivers SES delivery/bounce/complaint/reject event notifications to `POST /webhooks/notifications/ses` (`modules/webhooks/ses/`). Notification authenticity is verified via `sns-validator` (AWS's official signature-verification mechanism) plus a `TopicArn` equality check, following the same "webhook module" registration and fail-fast-config conventions as the Clerk and Mobbex webhooks. |
 
 ## Inter-service communication
 

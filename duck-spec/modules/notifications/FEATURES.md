@@ -75,7 +75,7 @@ Construir el módulo `notifications` con una interfaz tipada de envío de email,
 
 ## NOTIFICATIONS-002 — Email Delivery Tracking via Provider Webhook
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
