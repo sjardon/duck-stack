@@ -1,7 +1,5 @@
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { notificationsConfig } from '../../../shared/configs/notificationsConfig.js';
-import { db } from '../../../shared/infrastructure/db.js';
-import { EmailDeliveriesDBRepository } from '../../../shared/repositories/emailDeliveriesDBRepository.js';
 import { SqsEmailNotifier } from './sqsEmailNotifier.js';
 import type { IEmailNotifier } from './interfaces/iEmailNotifier.js';
 
@@ -19,7 +17,6 @@ export function resolveEmailNotifier(): IEmailNotifier {
   }
 
   const sqsClient = new SQSClient({ region: notificationsConfig.awsRegion });
-  const deliveries = new EmailDeliveriesDBRepository(db);
-  cachedNotifier = new SqsEmailNotifier(sqsClient, queueUrl, deliveries);
+  cachedNotifier = new SqsEmailNotifier(sqsClient, queueUrl);
   return cachedNotifier;
 }

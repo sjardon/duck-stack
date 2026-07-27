@@ -5,5 +5,5 @@ export interface EmailMessage {
 }
 
 export interface IEmailSender {
-  send(message: EmailMessage): Promise<{ providerMessageId: string }>;
+  send(message: EmailMessage): Promise<void>;
 }

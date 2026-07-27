@@ -3,18 +3,15 @@ import type { EmailMessage, IEmailSender } from '../../src/modules/notifications
 export class FakeEmailSender implements IEmailSender {
   public readonly calls: EmailMessage[] = [];
   private readonly error?: Error;
-  private readonly providerMessageId: string;
 
-  constructor(error?: Error, providerMessageId = 'fake-provider-message-id') {
+  constructor(error?: Error) {
     this.error = error;
-    this.providerMessageId = providerMessageId;
   }
 
-  async send(message: EmailMessage): Promise<{ providerMessageId: string }> {
+  async send(message: EmailMessage): Promise<void> {
     this.calls.push(message);
     if (this.error) {
       throw this.error;
     }
-    return { providerMessageId: this.providerMessageId };
   }
 }
