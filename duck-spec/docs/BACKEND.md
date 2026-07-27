@@ -18,8 +18,6 @@ Living document describing backend conventions, patterns, and stack decisions fo
 | CORS | `@fastify/cors` |
 | Dev runner | `tsx watch` |
 | Build | `tsc` |
-| Async messaging | AWS SQS (queue + dead-letter queue), via `@aws-sdk/client-sqs` |
-| Transactional email | AWS SES, via `@aws-sdk/client-ses`; templates authored in code with React Email (`@react-email/render`) |
 
 ## App architecture
 
@@ -29,13 +27,8 @@ Living document describing backend conventions, patterns, and stack decisions fo
 |------|---------------|
 | `src/app.ts` | `createApp()` — instantiates Fastify, registers shared plugins and feature modules. Does not call `listen`. |
 | `src/server.ts` | Calls `createApp()`, reads `HOST`/`PORT`, calls `fastify.listen()`, handles `SIGINT`/`SIGTERM`. |
-| `src/worker.ts` | Standalone entrypoint for background queue-processing workers (e.g. notifications email delivery) — no Fastify instance, no HTTP listener. Mirrors `server.ts`'s lifecycle shape (starts a long-running loop, handles `SIGINT`/`SIGTERM`) so it can be deployed and scaled as an independent process from the API. |
 
 Feature modules live under `src/modules/<name>/` and expose a `routes.ts` Fastify plugin registered in `app.ts`. Shared infrastructure (logger, postgres.js database client) lives under `src/shared/infrastructure/`. Reusable plugins under `src/shared/plugins/`.
-
-### Background workers
-
-A feature module that needs asynchronous, queue-driven processing (rather than an HTTP route) exposes a `worker/` subdirectory (e.g. `modules/notifications/worker/emailWorker.ts`) with a `startXxxWorker()` long-poll loop function, plus a `dtos/` Zod schema for validating the deserialized queue message. `src/worker.ts` is the process entrypoint that calls the relevant `startXxxWorker()` functions; it is built and deployed as a separate process/container from the API (`src/server.ts`), sharing the same codebase and config layer but with its own `package.json` script. Malformed queue payloads are logged and discarded without retry (never routed to business logic) so a single poison message cannot block the queue.
 
 ## Coding conventions
 
@@ -265,11 +258,11 @@ Listing endpoints that may return large result sets use cursor-based pagination 
 
 Webhook endpoints are feature modules, not shared plugins. Each provider's webhook handler lives under `src/modules/webhooks/<provider>/` and is registered in `app.ts` as a scoped Fastify plugin.
 
-**Raw body requirement.** Webhook signature verification libraries (e.g. Svix, `sns-validator`) require the unmodified request bytes. Because Fastify v4 does not support a global `rawBody` option, webhook plugins register a scoped `addContentTypeParser(...)` override for whatever `Content-Type` the provider actually sends — `application/json` for Clerk/Mobbex, `text/plain; charset=UTF-8` for AWS SNS (confirmed against AWS's own HTTP notification docs) — with `{ parseAs: 'buffer' }`. This causes `request.body` to arrive as a `Buffer` inside the plugin's route context only — other routes are unaffected.
+**Raw body requirement.** Webhook signature verification libraries (e.g. Svix) require the unmodified request bytes. Because Fastify v4 does not support a global `rawBody` option, webhook plugins register a scoped `addContentTypeParser('application/json', { parseAs: 'buffer' }, ...)` override. This causes `request.body` to arrive as a `Buffer` inside the plugin's route context only — other routes are unaffected.
 
 **Registration order.** Webhook plugins must be registered in `app.ts` before `clerkAuthPlugin` so the global `onRequest` auth hook does not attempt JWT verification on routes that carry no `Authorization` header by design.
 
-**Fail-fast secret check.** Each webhook plugin reads its signing secret (or, where the provider has no shared-secret concept, an equivalent fixed identifier such as an SNS `TopicArn`) from `process.env` at registration time and throws `Error` immediately if the variable is absent. This prevents the route from ever being served without signature verification.
+**Fail-fast secret check.** Each webhook plugin reads its signing secret from `process.env` at registration time and throws `Error` immediately if the variable is absent. This prevents the route from ever being served without signature verification.
 
 **Repository pattern.** All database calls within a webhook module are centralized in a `<Provider>SyncRepository` class. Handler functions receive a repository instance via constructor injection and call typed methods (`upsertUser`, `upsertOrganization`, `createMembership`, etc.). This keeps SQL logic testable in isolation and out of handler/dispatcher code.
 
@@ -294,7 +287,6 @@ Unit tests live under `apps/services/tests/unit/` using Jest. Interface mocks li
 | `mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
 | `subscriptionsConfig.ts` | `STRICT_ENTITLEMENTS_ON_PAST_DUE` |
 | `dbConfig.ts` | (database connection — see Database client section) |
-| `notificationsConfig.ts` | `AWS_REGION`, `NOTIFICATIONS_EMAIL_QUEUE_URL`, `NOTIFICATIONS_EMAIL_DLQ_URL`, `NOTIFICATIONS_SES_FROM_ADDRESS`, `NOTIFICATIONS_SQS_POLL_WAIT_SECONDS`, `NOTIFICATIONS_SES_CONFIGURATION_SET_NAME`, `NOTIFICATIONS_SES_EVENTS_TOPIC_ARN` |
 
 Use this shape:
 
@@ -319,6 +311,5 @@ Keep comments small. Add a comment when it explains the domain reasoning or a no
 | Script | Command |
 |--------|---------|
 | `dev` | `tsx watch src/server.ts` |
-| `worker` | `tsx watch src/worker.ts` |
 | `build` | `tsc` |
 | `lint` | `eslint src` |

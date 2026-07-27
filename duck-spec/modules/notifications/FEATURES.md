@@ -6,7 +6,7 @@ Módulo de notificaciones del producto. Provee una interfaz abstracta para que c
 
 ## NOTIFICATIONS-001 — Email Core: Port, SES Adapter, Async Delivery
 
-**Estado:** DONE
+**Estado:** TODO
 
 ### Contexto
 
@@ -75,7 +75,7 @@ Construir el módulo `notifications` con una interfaz tipada de envío de email,
 
 ## NOTIFICATIONS-002 — Email Delivery Tracking via Provider Webhook
 
-**Estado:** DONE
+**Estado:** TODO
 
 ### Contexto
 
