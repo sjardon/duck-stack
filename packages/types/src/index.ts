@@ -187,6 +187,29 @@ export interface QuotasResponse {
   quotas: QuotaUsage[];
 }
 
+// Context required to render the welcome email template
+export interface WelcomeEmailContext {
+  recipientName: string;
+}
+
+// One entry per registered template id — extended by future features, never removed.
+export interface EmailTemplateContextMap {
+  welcome: WelcomeEmailContext;
+}
+
+export type EmailTemplateId = keyof EmailTemplateContextMap;
+
+export interface SendEmailInput<T extends EmailTemplateId = EmailTemplateId> {
+  templateId: T;
+  to: string;
+  context: EmailTemplateContextMap[T];
+}
+
+// The port — every email send goes through this interface (ties templateId to context's shape at compile time).
+export interface EmailNotifier {
+  send<T extends EmailTemplateId>(input: SendEmailInput<T>): void;
+}
+
 export interface SubscriptionPlan {
   id: string;
   code: string;

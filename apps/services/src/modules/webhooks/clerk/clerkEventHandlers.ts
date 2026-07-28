@@ -3,13 +3,14 @@ import type { UserJSON, OrganizationJSON, OrganizationMembershipJSON } from '@cl
 import type { ClerkSyncRepository } from '../repositories/clerkSyncRepository.js';
 import type { ISubscriptionRepository } from '../../subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 import type { IClerkMetadataProvider } from '../../../shared/providers/interfaces/iClerkMetadataProvider.js';
+import type { EmailNotifier } from '@repo/types';
 import { subscriptionsConfig } from '../../../shared/configs/subscriptionsConfig.js';
 import { CreateTrialSubscriptionUseCase } from '../../subscriptions/useCases/createTrialSubscriptionUseCase.js';
 
 export async function handleUserUpsert(
   event: WebhookEvent & { data: UserJSON },
   repo: ClerkSyncRepository,
-): Promise<{ id: string }> {
+): Promise<{ id: string; email: string; name: string }> {
   const data = event.data;
   const email = data.email_addresses[0]?.email_address ?? '';
   const firstName = data.first_name ?? '';
@@ -17,12 +18,14 @@ export async function handleUserUpsert(
   const name = [firstName, lastName].filter(Boolean).join(' ') || email;
   const avatarUrl = data.image_url ?? null;
 
-  return repo.upsertUser({
+  const { id } = await repo.upsertUser({
     clerkUserId: data.id,
     email,
     name,
     avatarUrl,
   });
+
+  return { id, email, name };
 }
 
 export async function handleOrganizationUpsert(
@@ -56,17 +59,21 @@ export async function dispatchClerkEvent(
   repo: ClerkSyncRepository,
   subscriptionRepo: ISubscriptionRepository | undefined,
   metadataProvider: IClerkMetadataProvider,
+  notifier: EmailNotifier,
 ): Promise<void> {
   switch (event.type) {
     case 'user.created': {
       const typedEvent = event as WebhookEvent & { data: UserJSON };
-      const { id } = await handleUserUpsert(typedEvent, repo);
+      const { id, email, name } = await handleUserUpsert(typedEvent, repo);
       // R009, NF005: blocking write so a failure surfaces as a non-2xx webhook response,
       // letting Clerk retry the event until the identity claim is persisted.
       await metadataProvider.setUserAppId(typedEvent.data.id, id);
       if (subscriptionsConfig.signupMode === 'free_trial' && subscriptionRepo) {
         await new CreateTrialSubscriptionUseCase(subscriptionRepo).execute(id);
       }
+      // R006, EC005: fire-and-forget welcome email, only on first-time user creation —
+      // not awaited so the webhook response is unaffected by delivery outcome (NF001).
+      notifier.send({ templateId: 'welcome', to: email, context: { recipientName: name } });
       break;
     }
     case 'user.updated':
