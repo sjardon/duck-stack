@@ -22,6 +22,7 @@ import type { ClerkSyncRepository } from '../../../../../src/modules/webhooks/re
 import type { ISubscriptionRepository } from '../../../../../src/modules/subscriptions/repositories/interfaces/iSubscriptionRepository.js';
 import type { IClerkMetadataProvider } from '../../../../../src/shared/providers/interfaces/iClerkMetadataProvider.js';
 import type { WebhookEvent } from '@clerk/backend/webhooks';
+import type { EmailNotifier } from '@repo/types';
 
 const mockConfig = subscriptionsConfig as { signupMode: string; freeTrialDays: number };
 
@@ -48,6 +49,10 @@ const mockMetadataProvider = {
   setOrgAppId: jest.fn().mockResolvedValue(undefined),
 } as unknown as IClerkMetadataProvider;
 
+const mockNotifier = {
+  send: jest.fn(),
+} as unknown as EmailNotifier;
+
 function makeUserCreatedEvent(): WebhookEvent {
   return {
     type: 'user.created',
@@ -69,6 +74,7 @@ beforeEach(() => {
   (mockClerkRepo.upsertOrganization as jest.Mock).mockResolvedValue({ id: 'internal-org-001' });
   (mockMetadataProvider.setUserAppId as jest.Mock).mockResolvedValue(undefined);
   (mockMetadataProvider.setOrgAppId as jest.Mock).mockResolvedValue(undefined);
+  (mockNotifier.send as jest.Mock).mockReturnValue(undefined);
 });
 
 // T022 — R004, R005, EC008
@@ -77,7 +83,7 @@ describe('dispatchClerkEvent — user.created in free_trial mode (R004, R005)', 
     mockConfig.signupMode = 'free_trial';
     const event = makeUserCreatedEvent();
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     const MockUseCase = CreateTrialSubscriptionUseCase as jest.MockedClass<typeof CreateTrialSubscriptionUseCase>;
     expect(MockUseCase).toHaveBeenCalledWith(mockSubscriptionRepo);
@@ -88,7 +94,7 @@ describe('dispatchClerkEvent — user.created in free_trial mode (R004, R005)', 
     mockConfig.signupMode = 'freemium';
     const event = makeUserCreatedEvent();
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     const MockUseCase = CreateTrialSubscriptionUseCase as jest.MockedClass<typeof CreateTrialSubscriptionUseCase>;
     expect(MockUseCase).not.toHaveBeenCalled();
@@ -99,7 +105,7 @@ describe('dispatchClerkEvent — user.created in free_trial mode (R004, R005)', 
     mockConfig.signupMode = 'free_trial';
     const event = makeUserCreatedEvent();
 
-    await dispatchClerkEvent(event, mockClerkRepo, undefined, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, undefined, mockMetadataProvider, mockNotifier);
 
     const MockUseCase = CreateTrialSubscriptionUseCase as jest.MockedClass<typeof CreateTrialSubscriptionUseCase>;
     expect(MockUseCase).not.toHaveBeenCalled();
@@ -121,7 +127,7 @@ describe('dispatchClerkEvent — user.updated does not trigger trial creation (R
       },
     } as unknown as WebhookEvent;
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     const MockUseCase = CreateTrialSubscriptionUseCase as jest.MockedClass<typeof CreateTrialSubscriptionUseCase>;
     expect(MockUseCase).not.toHaveBeenCalled();
@@ -141,7 +147,7 @@ describe('dispatchClerkEvent — blocking Clerk metadata write on created events
       callOrder.push('setUserAppId');
     });
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     expect(mockMetadataProvider.setUserAppId).toHaveBeenCalledWith('clerk-user-001', 'internal-user-001');
     expect(callOrder).toEqual(['upsertUser', 'setUserAppId']);
@@ -153,7 +159,7 @@ describe('dispatchClerkEvent — blocking Clerk metadata write on created events
       data: { id: 'clerk-org-001', name: 'Acme', slug: 'acme' },
     } as unknown as WebhookEvent;
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     expect(mockMetadataProvider.setOrgAppId).toHaveBeenCalledWith('clerk-org-001', 'internal-org-001');
   });
@@ -164,7 +170,7 @@ describe('dispatchClerkEvent — blocking Clerk metadata write on created events
     const event = makeUserCreatedEvent();
 
     await expect(
-      dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider),
+      dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier),
     ).rejects.toBe(metadataError);
   });
 
@@ -180,8 +186,41 @@ describe('dispatchClerkEvent — blocking Clerk metadata write on created events
       },
     } as unknown as WebhookEvent;
 
-    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider);
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
 
     expect(mockMetadataProvider.setUserAppId).not.toHaveBeenCalled();
+  });
+});
+
+// T028 — R006, EC005
+describe('dispatchClerkEvent — welcome email dispatch (R006, EC005)', () => {
+  it('WHEN dispatchClerkEvent is called with a user.created event THEN notifier.send is called once with the welcome template, the event email, and the derived recipient name', async () => {
+    const event = makeUserCreatedEvent();
+
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
+
+    expect(mockNotifier.send).toHaveBeenCalledTimes(1);
+    expect(mockNotifier.send).toHaveBeenCalledWith({
+      templateId: 'welcome',
+      to: 'test@example.com',
+      context: { recipientName: 'Test User' },
+    });
+  });
+
+  it('WHEN dispatchClerkEvent is called with a user.updated event THEN notifier.send is NOT called', async () => {
+    const event = {
+      type: 'user.updated',
+      data: {
+        id: 'clerk-user-001',
+        email_addresses: [{ email_address: 'test@example.com' }],
+        first_name: 'Test',
+        last_name: 'User',
+        image_url: null,
+      },
+    } as unknown as WebhookEvent;
+
+    await dispatchClerkEvent(event, mockClerkRepo, mockSubscriptionRepo, mockMetadataProvider, mockNotifier);
+
+    expect(mockNotifier.send).not.toHaveBeenCalled();
   });
 });

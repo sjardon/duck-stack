@@ -35,6 +35,12 @@ jest.mock('../../../../../src/modules/webhooks/repositories/clerkSyncRepository.
   ClerkSyncRepository: jest.fn().mockImplementation(() => ({})),
 }));
 
+// Mock resolveNotifier so route registration doesn't require real email config
+const mockNotifierInstance = { send: jest.fn() };
+jest.mock('../../../../../src/modules/notifications/providers/resolveNotifier.js', () => ({
+  resolveNotifier: jest.fn().mockImplementation(() => mockNotifierInstance),
+}));
+
 // Mock dispatchClerkEvent so we can control its behavior
 const mockDispatchClerkEvent = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../../../src/modules/webhooks/clerk/clerkEventHandlers.js', () => ({

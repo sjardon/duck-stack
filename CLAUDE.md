@@ -1,6 +1,6 @@
 # duck-stack
 
-A SaaS starter pack providing the foundational features every product needs: auth, subscriptions, payments, and more. Intended as a reusable base for new SaaS projects.
+Monorepo (Fastify + React + TypeScript + simplified hexagonal architecture pattern) for a SaaS starter pack providing the foundational features every product needs: auth, subscriptions, payments, and more. Intended as a reusable base for new SaaS projects.
 
 ## Monorepo structure
 
