@@ -66,3 +66,71 @@ Dar a los módulos del backend un mecanismo para enviar emails transaccionales a
 - `duck-spec/docs/BACKEND.md` — arquitectura hexagonal simplificada, puertos/adapters, regla de fire-and-forget async, política de logging y configuración.
 - `duck-spec/docs/INFRASTRUCTURE.md` — SES requiere identidad verificada y permiso IAM `ses:SendEmail` en el instance role de App Runner (no gestionado aún en Terraform).
 - React Email — render server-side a HTML/texto (`render` de `react-email`, primitivos de `@react-email/components`).
+
+---
+
+## NOTIFICATIONS-002 — Migración del envío de email a Resend
+
+**Estado:** TODO
+
+### Contexto
+
+NOTIFICATIONS-001 dejó operativo el envío de email transaccional detrás de un puerto abstracto, con un adapter que habla con AWS SES v2. Al salir de AWS ese adapter queda sin infraestructura que lo respalde: la identidad de dominio, el permiso de envío y las variables de runtime que INFRA-005 iba a proveer nunca llegaron a construirse, y esa feature quedó marcada como obsoleta junto con el resto de la infraestructura de AWS.
+
+El resultado es que hoy el backend no puede enviar ningún email. Y, además, no llega a arrancar: el notificador se resuelve durante el registro del plugin de webhooks, por lo que la ausencia de la dirección remitente aborta el boot en lugar de degradar el envío.
+
+Este es el punto donde se cobra la inversión en puertos y adapters: el contrato que consumen los módulos no tiene por qué enterarse del cambio de proveedor.
+
+### Objetivo
+
+Reemplazar el proveedor de envío de email por Resend sin alterar el puerto que consumen los demás módulos ni el comportamiento observable del envío.
+
+### Requerimientos funcionales
+
+- El email de bienvenida se entrega al destinatario a través del proveedor nuevo
+- El contrato del puerto de envío y la forma en que los módulos lo consumen no cambian
+- Las plantillas existentes se siguen renderizando igual y el contenido que recibe el destinatario no cambia
+- La credencial del proveedor y la dirección remitente se configuran de forma independiente por environment
+- Un fallo del proveedor se registra en el log y no se propaga ni interrumpe el flujo del módulo llamador
+- El proyecto deja de depender del SDK del proveedor anterior
+
+### Fuera de scope
+
+- Plantillas nuevas o cambios de contenido en las existentes
+- Manejo de bounces, quejas y estado de entrega
+- Verificación del dominio remitente ante el proveedor, que es un trámite manual sobre DNS
+- Cola durable, reintentos con persistencia o worker separado: el envío sigue siendo in-process
+- Cambios en la semántica de arranque del servicio ante configuración de email ausente (SERVICES-010)
+- Observabilidad de la entrega más allá del log
+
+### Requerimientos no funcionales
+
+- El cambio no debe requerir modificaciones en los módulos que consumen el puerto de envío
+- El envío no debe agregar latencia perceptible al flujo del módulo llamador
+- Ningún fallo del proveedor puede degradar ni interrumpir la request que originó el envío
+- No se registran en el log datos sensibles ni PII del cuerpo del email
+
+### Edge cases
+
+- La cuenta del proveedor arranca sin el dominio remitente verificado; hasta que la verificación propague, los envíos a destinatarios arbitrarios son rechazados
+- Una credencial inválida produce un fallo por cada envío que solo queda en el log, porque el envío es fire-and-forget y nadie observa el resultado
+- El proveedor impone límites de tasa; superarlos rechaza envíos que hoy nadie reintenta
+- Dev y prod deben usar direcciones remitentes distintas para no mezclar la reputación de envío entre environments
+- Las plantillas se renderizan a HTML y a texto plano; el proveedor nuevo debe recibir ambas variantes o el email pierde su versión alternativa
+- El adapter anterior y el nuevo no deben coexistir cableados a la vez: dos notificadores activos duplicarían los envíos
+
+### Technical constraints
+
+- Proveedor de email: Resend, detrás del mismo puerto abstracto que ya consumen los módulos
+- El adapter de AWS SES v2 se reemplaza y se retira la dependencia `@aws-sdk/client-sesv2`
+- Configuración tipada bajo `src/shared/configs/`, sin lecturas directas de `process.env` fuera de los archivos de configuración
+- Las plantillas de React Email y su render server-side a HTML y texto plano se mantienen sin cambios
+
+### Documentación relevante
+
+- `duck-spec/modules/notifications/notifications-001-email-core/design.md` — diseño del puerto, el adapter y el wrapper fire-and-forget
+- `duck-spec/docs/BACKEND.md` — puertos/adapters, regla de fire-and-forget async, política de logging y configuración
+
+### Dependencias
+
+- INFRA-010 — la infraestructura de AWS debe estar retirada y INFRA-005 e INFRA-006 marcadas como obsoletas

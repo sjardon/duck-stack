@@ -456,3 +456,135 @@ Llevar use cases, handlers, webhook routes y plugins al estado donde toda decisi
 ### Dependencias
 
 - SERVICES-007 — depende del contrato actualizado del `errorHandler` y de la firma con `originalError`
+
+---
+
+## SERVICES-010 — Validación de configuración de entorno al boot
+
+**Estado:** TODO
+
+### Contexto
+
+SERVICES-003 centralizó todas las lecturas de `process.env` en archivos bajo `src/shared/configs/`, pero dejó explícitamente fuera de scope la validación de schema de esas variables. El resultado es que la capa de configuración tipa los valores sin verificarlos, y hoy conviven tres clases de problema:
+
+- **Defaults vacíos que enmascaran ausencias.** La dirección remitente de email y las credenciales de Mobbex caen a string vacío cuando la variable no está. La configuración declara el valor como presente y la falla aparece más tarde, en distintos puntos del ciclo de vida y con mensajes distintos según el consumidor.
+- **Casts sin verificación.** El modo de alta de usuarios se afirma como un tipo cerrado sobre un string arbitrario, de modo que un valor inválido atraviesa el sistema sin ser detectado.
+- **Parseos numéricos silenciosos.** El puerto, los días de trial y el timeout del proveedor de pagos se convierten a número sin comprobar el resultado, quedando en un valor no numérico si el contenido es basura.
+
+Además quedan dos lecturas de `process.env` fuera de la capa de configuración, ambas para el secreto de Clerk, que violan la regla establecida en `duck-spec/docs/BACKEND.md`.
+
+### Objetivo
+
+Que el servicio valide toda su configuración de entorno al arrancar y falle de inmediato con un reporte completo de lo que falta o es inválido, y que ninguna variable de entorno se consuma fuera de un archivo de configuración.
+
+### Requerimientos funcionales
+
+- El servicio valida toda su configuración de entorno durante el arranque, antes de aceptar tráfico
+- El arranque se aborta cuando falta alguna variable requerida: la conexión a base de datos, los tres secretos de Clerk, la dirección remitente de email y las tres credenciales del proveedor de pagos
+- El arranque se aborta cuando una variable numérica contiene un valor que no es un número, cuando una variable enumerada contiene un valor fuera de su conjunto válido, o cuando la dirección remitente no tiene forma de email
+- El mensaje de error de arranque enumera todos los problemas detectados en una sola salida, no solamente el primero
+- Los objetos de configuración exponen únicamente valores ya validados, sin defaults vacíos que simulen presencia ni afirmaciones de tipo sin verificar
+- El secreto de Clerk se consume desde el objeto de configuración de autenticación, igual que el resto de las variables
+
+### Fuera de scope
+
+- Reglas de validación condicionales entre variables (p.ej. exigir credenciales de pago solo según el proveedor configurado)
+- Incorporar variables de entorno nuevas o modificar los defaults de las variables ya existentes
+- Validación de configuración en `web`, en `landing` o del lado de Terraform
+- Recarga de configuración en caliente o revalidación posterior al arranque
+- Mantener un catálogo de variables fuera del código, como archivos de ejemplo de entorno o tablas en la documentación
+- Cambios en el comportamiento de los módulos que consumen la configuración, más allá de recibir valores ya validados
+
+### Requerimientos no funcionales
+
+- El reporte de error de arranque nombra las variables con problemas pero nunca imprime sus valores, para no filtrar secretos en los logs de deploy
+- Importar un objeto de configuración desde un test unitario no debe disparar la validación global, de modo que la suite siga corriendo sin un entorno completo
+- Con una configuración válida, el comportamiento observable del servicio es idéntico al actual
+- Ningún archivo fuera de `src/shared/configs/` puede contener una referencia a `process.env`, sin excepciones documentadas
+
+### Edge cases
+
+- Faltan varias variables a la vez: deben reportarse todas juntas en un único mensaje, para no obligar a descubrirlas de a una por deploy fallido
+- Variable definida pero vacía o compuesta solo de espacios: debe tratarse como ausente y no como un valor válido
+- Variable numérica con contenido no numérico: hoy queda como valor no numérico sin aviso y debe pasar a abortar el arranque
+- Variable enumerada con un valor fuera del conjunto: hoy atraviesa el cast sin detección y debe pasar a abortar el arranque
+- Entornos ya desplegados que hoy levantan sin las credenciales del proveedor de pagos dejarán de arrancar tras este cambio, por lo que las variables deben estar cargadas en todos los environments antes de desplegarlo
+- El proceso de arranque debe terminar con un código de salida distinto de cero para que el orquestador de deploy detecte la falla en lugar de dar el arranque por bueno
+
+### Technical constraints
+
+- Validación de schemas con Zod, ya presente como dependencia de `apps/services` y usada para los DTOs
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` — sección "Configuration" (regla de no leer `process.env` fuera de configs, ubicación y forma de los archivos de configuración)
+
+### Dependencias
+
+- SERVICES-003 — las lecturas de `process.env` ya deben estar centralizadas en los archivos de configuración
+
+---
+
+## SERVICES-011 — Error tracking del backend
+
+**Estado:** TODO
+
+### Contexto
+
+El backend registra sus errores en el log estructurado, con la traza original preservada y el identificador de request en cada línea. Pero nadie lee logs de forma proactiva: INFRA-011 los dejó consultables, y buscar no es lo mismo que enterarse.
+
+Hay además un punto ciego concreto y por diseño. El envío de email es fire-and-forget: su wrapper captura cualquier fallo, lo registra y lo detiene para que no alcance al módulo llamador. Eso protege la request, pero significa que ningún email que no sale produce señal alguna fuera de una línea de log que nadie mira.
+
+### Objetivo
+
+Que toda excepción del backend quede reportada, agrupada y correlacionada con la request que la originó, incluidas las que hoy se capturan y se detienen en silencio.
+
+### Requerimientos funcionales
+
+- Toda excepción no controlada que atraviesa el manejador de errores del servidor se reporta con su traza completa
+- Las excepciones que ocurren fuera del ciclo de una request, incluidas las del envío de email fire-and-forget, también se reportan
+- Cada reporte queda correlacionado con el identificador de request que ya acompaña a las líneas de log
+- Cada reporte indica el environment y la versión desplegada del servicio
+- Los reportes de una misma condición se agrupan en lugar de acumularse como incidencias sueltas
+- Secretos, tokens y datos personales quedan excluidos de lo que se envía al proveedor
+- El reporte de errores se activa por configuración y su ausencia no impide arrancar ni operar el servicio
+
+### Fuera de scope
+
+- Instrumentación de las SPAs (WEB-002, LANDING-002)
+- Tracing distribuido y métricas de rendimiento
+- Alertas sobre condiciones de negocio
+- Cambios en el modelo de errores de dominio o en el contrato de respuesta del manejador de errores
+- Reintentos o recuperación automática ante un error
+- Reemplazar el logging estructurado existente
+
+### Requerimientos no funcionales
+
+- El envío de reportes no debe agregar latencia perceptible a la request ni bloquear la respuesta al cliente
+- Un fallo o una indisponibilidad del proveedor de reportes no puede degradar ni interrumpir el servicio
+- La política de no registrar PII vigente en el backend debe aplicar también a lo que se envía al proveedor
+- La instrumentación no debe obligar a modificar los casos de uso, repositorios ni adapters existentes
+
+### Edge cases
+
+- El wrapper fire-and-forget del envío de email captura y detiene el error: una instrumentación que solo escuche excepciones no capturadas deja ese caso tan invisible como está hoy
+- Los cuerpos de request pueden contener datos personales y suelen capturarse por defecto, por lo que el filtrado debe estar configurado desde el primer despliegue y no agregarse después
+- Los errores de dominio esperados —validación, permisos, recurso inexistente— no son fallas del sistema, y reportarlos ahoga la señal entre ruido
+- Un error dentro de un bucle o en un endpoint muy transitado puede agotar la cuota del plan en minutos
+- El identificador de request vive en el contexto asincrónico: una excepción emitida fuera de ese contexto no lo tiene y debe reportarse igual, sin él, en lugar de descartarse
+- Sin la variable de configuración presente, el servicio debe arrancar normalmente y simplemente no reportar
+
+### Technical constraints
+
+- Proveedor de error tracking: Better Stack, compatible con los SDK de Sentry
+- La instrumentación usa el SDK de Sentry para Node apuntado al destino del proveedor mediante configuración, de modo que cambiar de proveedor sea cambiar una variable
+- Configuración tipada bajo `src/shared/configs/`, sin lecturas directas de `process.env` fuera de los archivos de configuración
+
+### Documentación relevante
+
+- `duck-spec/docs/BACKEND.md` — secciones "Logging strategy", "Domain error model" y "Error handling rules"
+- `duck-spec/modules/notifications/notifications-001-email-core/design.md` — wrapper fire-and-forget que captura y detiene los fallos de envío
+
+### Dependencias
+
+- INFRA-011 — la cuenta del proveedor de observabilidad y sus convenciones por environment deben existir

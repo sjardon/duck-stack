@@ -108,7 +108,7 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 
 1. **Log + re-throw** — default.
 2. **Log + transform** — wrap in a different `DomainError` when it better describes the situation for the caller. Set `originalError`.
-3. **Log + handle** — fallback, alternative source, or sentinel value. Only when the failure is non-critical (see Silent-fail below).
+3. **Log + handle** — fallback, alternative source, or sentinel value. Only when the failure is non-critical. Try to donot do this.
 
 ### Logging
 
@@ -124,10 +124,6 @@ All domain errors extend `DomainError` from `shared/errors.ts`: `(code: string, 
 | Any other | `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }` | 500 |
 
 `originalError` is logged but never serialized in the response. `QuotaExceededError`, `TrialExpiredError`, and `ServiceUnavailableError` are special-cased with additional response data (extra body fields or, for `ServiceUnavailableError`, a `Retry-After` header) beyond the base `{ code, message }` contract — see "Domain error model" above.
-
-### Silent-fail exception
-
-`return null` (or another sentinel) without re-throwing is permitted only when the failure is non-critical and the caller can proceed sensibly. Examples: cache miss → primary source; embedded analytics snippet → must not break the host page. Each site requires a code comment justifying the silent fail.
 
 ### Anti-patterns
 
