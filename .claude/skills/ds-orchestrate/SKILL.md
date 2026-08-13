@@ -174,6 +174,8 @@ Update `lastStep` to `"integrate"`.
 ## RULES
 
 - Invoke the appropriate agent for each step in the workflow.
+- Every step MUST be invoked with the Agent tool using the exact `subagent_type` of the ds-*-agent named in that step (e.g. `subagent_type: "ds-analysis-agent"`). NEVER use `subagent_type: "claude"` or any other generic agent with a "load this skill file" prompt — that bypasses the agent's model and tool configuration and silently runs the step on the wrong model.
+- NEVER pass the `model` parameter to the Agent tool. The model is owned by each agent's frontmatter in `.claude/agents/`.
 - Do not read the subagents skill files — only invoke them with the current context.
 - Each agent invocation MUST include only its own skill file — do not attach other skill files.
 - Never skip a step, even if it seems unnecessary.
