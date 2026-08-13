@@ -382,7 +382,7 @@ Proveer un canal de alertas genérico por environment, reusable por cualquier co
 
 ## INFRA-008 — Despliegue del backend en DigitalOcean App Platform
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

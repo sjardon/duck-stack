@@ -52,6 +52,8 @@ Each app declares workspace dependencies using the `workspace:*` protocol in `pa
 
 ## AWS Base Infrastructure (INFRA-002)
 
+> **Superseded for the backend compute layer by INFRA-008.** The `services` backend no longer targets AWS App Runner; it deploys to DigitalOcean App Platform (see "Backend Deployment — DigitalOcean App Platform (INFRA-008)" below). The Terraform below was never applied and remains versioned in the repository, still describing the VPC/ECR/App Runner design as originally planned; its removal is tracked separately (INFRA-010) and has not happened yet.
+
 The `infra/terraform/` directory contains a modular Terraform project that provisions the foundational AWS infrastructure required to run the `services` backend.
 
 ### Directory structure
@@ -212,3 +214,31 @@ Every reusable workflow job sets a `concurrency` group keyed to `<app>-<environm
 All AWS authentication happens via OIDC. Each GitHub Environment stores one secret (`AWS_OIDC_ROLE_ARN`) and several non-sensitive variables (`AWS_REGION`, `ECR_REPOSITORY_URL`, `APP_RUNNER_SERVICE_ARN`, `WEB_S3_BUCKET`, `LANDING_S3_BUCKET`, `WEB_CLOUDFRONT_DISTRIBUTION_ID`, `LANDING_CLOUDFRONT_DISTRIBUTION_ID`). No static AWS access keys are stored anywhere in the repository or GitHub configuration.
 
 Each environment's IAM role must have a trust policy allowing `token.actions.githubusercontent.com` as an OIDC provider with a `sub` condition matching `repo:sjardon/duck-stack:environment:<env-name>`.
+
+---
+
+## Backend Deployment — DigitalOcean App Platform (INFRA-008)
+
+The `services` backend deploys to DigitalOcean App Platform from a single versioned application specification at `.do/app.yaml`, no Terraform involved. The specification declares exactly one `service` component built from `apps/services/Dockerfile` with the monorepo root as Docker build context (`source_dir: /`), so the Dockerfile's root-relative `COPY` instructions of `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, and the shared packages' `package.json` files resolve during the platform build.
+
+### Templated specification, one file per structure
+
+Every value that differs per environment or must never be committed — the app name, the GitHub branch, and the 19 runtime environment variables the backend reads — is expressed as an `${VAR}` placeholder in `.do/app.yaml` rather than a literal. A single specification structure serves every environment; no per-environment fork exists. Secret-classified variables (`DATABASE_URL`, `CLERK_SECRET_KEY`, `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_WEBHOOK_SECRET`) are declared `type: secret`; the rest are `type: general`. All variables are `scope: RUN_TIME`. `SES_REGION` carries an inline comment marking it as an inert placeholder pending migration off SES.
+
+### Port and health check alignment
+
+The platform HTTP port (`http_port`), the health check port (`health_check.port`), and the container's `PORT` environment variable all resolve from the same `${PORT}` placeholder at render time, so the platform port and the port the process binds can never diverge. The health check probes `GET /health`, the endpoint already exposed by the backend.
+
+### Deploy procedure
+
+An operator copies `.do/.env.deploy.example` to a git-ignored `.do/.env.deploy.<environment>` file, fills in the real (including secret) values, and runs `.do/deploy.sh .do/.env.deploy.<environment>`. The script validates every placeholder is non-empty before making any network call, renders `.do/app.yaml` with `envsubst`, and reconciles the application with `doctl apps create --spec <rendered> --upsert --wait`, which creates the app on the first run and updates it in place — keyed by the `name` field — on every later run. The command prints the app ID and the resulting public HTTPS URL (`DefaultIngress`), which the operator records in the "Current deployments" table in `.do/README.md` for the rest of the system to consume.
+
+The versioned specification is the single source of truth: re-running the deploy procedure overwrites any configuration change made by hand in the DigitalOcean console. The service does not scale to zero; `.do/README.md` documents `doctl apps delete <app-id>` to stop it from consuming budget. `.do/README.md` also documents the exact startup-abort error (`Missing required env var: EMAIL_SENDER_ADDRESS`) as a missing-configuration failure rather than a platform failure.
+
+### What is out of scope here
+
+Automatic deploy on merge, manual deploy of an arbitrary commit, and rollback are not implemented (INFRA-012). Hosting for `web` and `landing` is unrelated to this deployment (INFRA-009). The Terraform project and the AWS GitHub Actions workflows described under INFRA-002/INFRA-004 above still exist in the repository; their removal is a separate, not-yet-done feature (INFRA-010).
+
+### Files
+
+`.do/app.yaml`, `.do/deploy.sh`, `.do/.env.deploy.example`, `.do/README.md`, and acceptance test suites under `.do/tests/` (`app-spec.test.sh`, `deploy-script.test.sh`, `env-example.test.sh`, `gitignore.test.sh`, `readme.test.sh`). `.gitignore` excludes `.do/.env.deploy.*` while keeping `.do/.env.deploy.example` tracked.

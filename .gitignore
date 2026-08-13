@@ -3,3 +3,5 @@ dist
 .turbo
 *.tsbuildinfo
 .env
+.do/.env.deploy.*
+!.do/.env.deploy.example

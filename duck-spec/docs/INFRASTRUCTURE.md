@@ -6,16 +6,26 @@ Living document describing AWS resources, Terraform setup, and CI/CD pipeline fo
 
 ## AWS resources
 
-Backend runs on App Runner (pulling from ECR). Frontend SPAs are served from private S3 buckets via CloudFront. All backend traffic flows through a shared VPC.
+> **Backend compute superseded (INFRA-008).** The design below (ECR + App Runner + VPC) was never applied and is no longer the backend's deploy target — `services` now runs on DigitalOcean App Platform, see "DigitalOcean App Platform" below. It remains documented here because the underlying Terraform is still versioned in the repository pending its removal (INFRA-010), and because it still describes `web`/`landing` static hosting until INFRA-009 migrates them.
+
+Frontend SPAs are served from private S3 buckets via CloudFront. All backend traffic (as originally designed, unapplied) flowed through a shared VPC.
 
 | Component | AWS Resource | Notes |
 |-----------|-------------|-------|
-| Container registry | ECR | Hosts `apps/services` images. Lifecycle: expire untagged >14 days, keep last 10 tagged. |
-| Backend | App Runner | Runs `services` via VPC connector. Auto-deploy disabled; CI/CD triggers updates. |
-| `web` static hosting | S3 + CloudFront | Private bucket, OAC-signed requests, 403/404 → `/index.html` for SPA routing. |
-| `landing` static hosting | S3 + CloudFront | Same pattern as `web`. |
-| Network | VPC + subnets | Private subnets (≥2 AZs) for App Runner; public subnets + IGW. No NAT gateway. |
-| IAM | Two roles | Access role (ECR pull for App Runner); instance role (container runtime). |
+| Container registry | ECR | Hosts `apps/services` images. Lifecycle: expire untagged >14 days, keep last 10 tagged. Unapplied; superseded for backend deploy by INFRA-008. |
+| Backend (superseded) | App Runner | Originally designed to run `services` via VPC connector; never applied. Backend now deploys to DigitalOcean App Platform (INFRA-008). |
+| `web` static hosting | S3 + CloudFront | Private bucket, OAC-signed requests, 403/404 → `/index.html` for SPA routing. Pending migration to Cloudflare Pages (INFRA-009). |
+| `landing` static hosting | S3 + CloudFront | Same pattern as `web`. Pending migration to Cloudflare Pages (INFRA-009). |
+| Network | VPC + subnets | Private subnets (≥2 AZs) for App Runner; public subnets + IGW. No NAT gateway. Unapplied. |
+| IAM | Two roles | Access role (ECR pull for App Runner); instance role (container runtime). Unapplied. |
+
+## DigitalOcean App Platform
+
+The `services` backend deploys to DigitalOcean App Platform (INFRA-008), not AWS. A single versioned specification, `.do/app.yaml`, declares one `service` component built from `apps/services/Dockerfile` with the monorepo root as Docker build context. Every environment-dependent value — app name, GitHub branch, and the 19 runtime environment variables the backend reads — is an `${VAR}` placeholder; the same specification structure serves every environment. Secret-classified variables (database connection string, Clerk keys, Mobbex credentials) are declared `type: secret`; their real values live only in a local, git-ignored `.do/.env.deploy.<environment>` file, never in the repository.
+
+The platform HTTP port, the health-check port, and the container's `PORT` variable all resolve from the same `${PORT}` placeholder, so they cannot diverge; the health check probes the backend's existing `GET /health` endpoint.
+
+Deploys are manual and repeatable: `.do/deploy.sh <values-file>` renders `.do/app.yaml` with `envsubst` and reconciles the application with `doctl apps create --spec <rendered> --upsert --wait`, which creates the app on the first run and updates it in place (keyed by the `name` field) on every later run, printing the resulting public HTTPS URL. `.do/README.md` documents the full procedure, including that console edits are overwritten by the next run and the command to scale the app down (it does not scale to zero). Automatic deploy on push/merge and rollback are not implemented here (INFRA-012).
 
 ## Terraform
 
