@@ -6,7 +6,7 @@ Living index of the functional state of each module. For the full specification 
 
 ## infra
 
-**Status:** Base monorepo scaffolded. Backend (`services`) deploys to DigitalOcean App Platform from a versioned, templated application specification (`.do/app.yaml`) applied through a manual, repeatable `doctl`-based procedure (INFRA-008); the AWS/Terraform compute design (INFRA-002) is superseded for the backend and pending removal (INFRA-010).
+**Status:** Base monorepo scaffolded. Backend (`services`) deploys to DigitalOcean App Platform from a versioned, templated application specification (`.do/app.yaml`) applied through a manual, repeatable `doctl`-based procedure (INFRA-008). `web` and `landing` each deploy to their own Cloudflare Pages project via a versioned `.cloudflare/deploy.sh` script that builds from the monorepo root and uploads `dist` through `wrangler`, with backend `CORS_ORIGIN` now supporting multiple comma-separated origins (INFRA-009). The AWS/Terraform compute and static-hosting design (INFRA-002/003) is superseded and pending removal (INFRA-010).
 
 The repository is a pnpm + Turborepo monorepo. It contains three applications (`apps/web`, `apps/landing`, `apps/services`) and three shared packages (`@repo/tsconfig`, `@repo/eslint-config`, `@repo/types`). The Turborepo pipeline coordinates `build`, `dev`, and `lint` across all workspaces in dependency order.
 

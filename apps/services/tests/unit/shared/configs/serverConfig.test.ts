@@ -72,5 +72,15 @@ describe('serverConfig', () => {
       const { serverConfig } = await import('../../../../src/shared/configs/serverConfig.js');
       expect(serverConfig.corsOrigin).toBe('https://example.com');
     });
+
+    it('splits a comma-separated CORS_ORIGIN into a trimmed array (EC004)', async () => {
+      process.env.CORS_ORIGIN =
+        ' https://web.example.com , https://landing.example.com ';
+      const { serverConfig } = await import('../../../../src/shared/configs/serverConfig.js');
+      expect(serverConfig.corsOrigin).toEqual([
+        'https://web.example.com',
+        'https://landing.example.com',
+      ]);
+    });
   });
 });
