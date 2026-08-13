@@ -108,6 +108,8 @@ The AWS provider `default_tags` block at the root module level applies `project`
 
 ## Static Hosting — S3 + CloudFront (INFRA-003)
 
+> **Superseded by INFRA-009.** `web` and `landing` are hosted on Cloudflare Pages (see "Static Hosting — Cloudflare Pages (INFRA-009)" below). The Terraform below was never applied and remains versioned in the repository, still describing the S3+CloudFront design as originally planned; its removal is tracked separately (INFRA-010) and has not happened yet.
+
 The `infra/terraform/` project includes a reusable `modules/static_site` module that provisions private S3-backed CloudFront distributions. The root configuration instantiates this module twice: once for `web` and once for `landing`.
 
 ### Module: `modules/static_site`
@@ -242,3 +244,33 @@ Automatic deploy on merge, manual deploy of an arbitrary commit, and rollback ar
 ### Files
 
 `.do/app.yaml`, `.do/deploy.sh`, `.do/.env.deploy.example`, `.do/README.md`, and acceptance test suites under `.do/tests/` (`app-spec.test.sh`, `deploy-script.test.sh`, `env-example.test.sh`, `gitignore.test.sh`, `readme.test.sh`). `.gitignore` excludes `.do/.env.deploy.*` while keeping `.do/.env.deploy.example` tracked.
+
+---
+
+## Static Hosting — Cloudflare Pages (INFRA-009)
+
+`web` and `landing` are each hosted as an independent Cloudflare Pages project, published through `.cloudflare/deploy.sh <web|landing> <values-file>` — never through Cloudflare's Git integration, so no deploy is ever triggered by a push. The script is the single build-and-publish entry point for both apps and mirrors the `.do/deploy.sh` pattern established by INFRA-008: a versioned script plus a git-ignored, per-environment values file.
+
+### Build and publish
+
+The script sources the given values file (`set -a; source <values-file>; set +a`), builds the target app from the monorepo root with `pnpm install --frozen-lockfile && pnpm --filter <app> build` so the `workspace:*` packages resolve, writes `apps/<app>/dist/_redirects` (`/* /index.html 200`) into the freshly built output for SPA-fallback routing, idempotently ensures the Cloudflare Pages project exists (`wrangler pages project create`, tolerating "already exists"), and uploads exactly `apps/<app>/dist` with `wrangler pages deploy --project-name <name> --branch <branch>`. `wrangler` is a pinned root `devDependency`, invoked via `pnpm exec wrangler`. The whole procedure — install, build, fallback file, deploy — is this single script invocation, with no prior manual step and no dependency outside `pnpm-lock.yaml`. The script parses and prints the resulting public `https://*.pages.dev` URL, which the operator records in `.cloudflare/README.md`'s "Current deployments" table; serving is exclusively through Cloudflare's own distribution network, with no separate origin host stood up.
+
+### One project per app, every environment covered
+
+Cloudflare Pages natively distinguishes a production deployment (branch matches the project's configured production branch) from a preview deployment (any other branch), each with its own public `*.pages.dev` URL. One Pages project per app therefore covers every environment — no per-environment project fork exists, and the deploy script never branches on environment; only the sourced values file differs.
+
+### Build-time configuration
+
+Each app's `VITE_*` variables are exported into the shell before the build runs, so Vite inlines them into `import.meta.env` ahead of any `.env` file: `web` reads `VITE_API_URL`, `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_LANDING_URL`, `VITE_PROVIDER_PORTAL_URL`; `landing` reads `VITE_API_URL`, `VITE_WEB_URL`. Only public-classified values are ever declared in `.cloudflare/.env.deploy.web.example` and `.cloudflare/.env.deploy.landing.example` — no secret-classified variable (Clerk secret key, webhook signing secrets, Mobbex credentials, `DATABASE_URL`) is ever present in a Cloudflare Pages project.
+
+### Backend CORS for multiple SPA origins
+
+`apps/services/src/shared/configs/serverConfig.ts` splits a comma-separated `CORS_ORIGIN` into a trimmed `string[]`; a single value (including the `'*'` default) stays a plain string, unchanged from prior behavior. `@fastify/cors` matches a `string[]` against the request's `Origin` header element-by-element, so both SPA origins can be allowed from one `CORS_ORIGIN` value per environment. `.do/.env.deploy.example`'s `CORS_ORIGIN` comment documents the accepted format: a comma-separated list of full origins, no trailing slash.
+
+### What is out of scope here
+
+Automatic deployment on merge (INFRA-012), removal of the S3/CloudFront Terraform (INFRA-010), custom domains and certificates, and custom cache/WAF/geo rules are not covered. No source file of `apps/web` or `apps/landing` was changed.
+
+### Files
+
+`.cloudflare/deploy.sh`, `.cloudflare/.env.deploy.web.example`, `.cloudflare/.env.deploy.landing.example`, `.cloudflare/README.md` (includes the "Current deployments" URL table), and acceptance test suites under `.cloudflare/tests/` (`deploy-script.test.sh`, `env-example.test.sh`, `gitignore.test.sh`, `readme.test.sh`). `.gitignore` excludes `.cloudflare/.env.deploy.*` while keeping both `*.example` files tracked. `package.json` (root) declares `wrangler` as a pinned devDependency.

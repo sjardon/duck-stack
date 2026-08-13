@@ -5,3 +5,5 @@ dist
 .env
 .do/.env.deploy.*
 !.do/.env.deploy.example
+.cloudflare/.env.deploy.*
+!.cloudflare/.env.deploy.*.example

@@ -6,16 +6,16 @@ Living document describing AWS resources, Terraform setup, and CI/CD pipeline fo
 
 ## AWS resources
 
-> **Backend compute superseded (INFRA-008).** The design below (ECR + App Runner + VPC) was never applied and is no longer the backend's deploy target — `services` now runs on DigitalOcean App Platform, see "DigitalOcean App Platform" below. It remains documented here because the underlying Terraform is still versioned in the repository pending its removal (INFRA-010), and because it still describes `web`/`landing` static hosting until INFRA-009 migrates them.
+> **Backend compute superseded (INFRA-008); static hosting superseded (INFRA-009).** The design below (ECR + App Runner + VPC + S3/CloudFront) was never applied and is no longer the deploy target for either the backend or the two SPAs — `services` runs on DigitalOcean App Platform (see "DigitalOcean App Platform" below) and `web`/`landing` run on Cloudflare Pages (see "Cloudflare Pages" below). It remains documented here because the underlying Terraform is still versioned in the repository pending its removal (INFRA-010).
 
-Frontend SPAs are served from private S3 buckets via CloudFront. All backend traffic (as originally designed, unapplied) flowed through a shared VPC.
+Frontend SPAs were originally designed to be served from private S3 buckets via CloudFront (unapplied). All backend traffic (as originally designed, unapplied) flowed through a shared VPC.
 
 | Component | AWS Resource | Notes |
 |-----------|-------------|-------|
 | Container registry | ECR | Hosts `apps/services` images. Lifecycle: expire untagged >14 days, keep last 10 tagged. Unapplied; superseded for backend deploy by INFRA-008. |
 | Backend (superseded) | App Runner | Originally designed to run `services` via VPC connector; never applied. Backend now deploys to DigitalOcean App Platform (INFRA-008). |
-| `web` static hosting | S3 + CloudFront | Private bucket, OAC-signed requests, 403/404 → `/index.html` for SPA routing. Pending migration to Cloudflare Pages (INFRA-009). |
-| `landing` static hosting | S3 + CloudFront | Same pattern as `web`. Pending migration to Cloudflare Pages (INFRA-009). |
+| `web` static hosting (superseded) | S3 + CloudFront | Private bucket, OAC-signed requests, 403/404 → `/index.html` for SPA routing. Never applied. `web` now deploys to Cloudflare Pages (INFRA-009). |
+| `landing` static hosting (superseded) | S3 + CloudFront | Same pattern as `web`. Never applied. `landing` now deploys to Cloudflare Pages (INFRA-009). |
 | Network | VPC + subnets | Private subnets (≥2 AZs) for App Runner; public subnets + IGW. No NAT gateway. Unapplied. |
 | IAM | Two roles | Access role (ECR pull for App Runner); instance role (container runtime). Unapplied. |
 
@@ -26,6 +26,14 @@ The `services` backend deploys to DigitalOcean App Platform (INFRA-008), not AWS
 The platform HTTP port, the health-check port, and the container's `PORT` variable all resolve from the same `${PORT}` placeholder, so they cannot diverge; the health check probes the backend's existing `GET /health` endpoint.
 
 Deploys are manual and repeatable: `.do/deploy.sh <values-file>` renders `.do/app.yaml` with `envsubst` and reconciles the application with `doctl apps create --spec <rendered> --upsert --wait`, which creates the app on the first run and updates it in place (keyed by the `name` field) on every later run, printing the resulting public HTTPS URL. `.do/README.md` documents the full procedure, including that console edits are overwritten by the next run and the command to scale the app down (it does not scale to zero). Automatic deploy on push/merge and rollback are not implemented here (INFRA-012).
+
+## Cloudflare Pages
+
+`web` and `landing` each deploy to their own Cloudflare Pages project (INFRA-009), not AWS. `.cloudflare/deploy.sh <web|landing> <values-file>` is the single build-and-publish entry point for both apps — it is never triggered by Cloudflare's Git integration or a git hook, so no automatic deploy-on-push is introduced (that remains INFRA-012's scope).
+
+The script sources the given values file, builds the target app from the monorepo root (`pnpm install --frozen-lockfile && pnpm --filter <app> build`) so `workspace:*` dependencies resolve, writes `apps/<app>/dist/_redirects` (`/* /index.html 200`) for SPA-fallback routing, idempotently ensures the Pages project exists (`wrangler pages project create`), and uploads exactly `apps/<app>/dist` with `wrangler pages deploy --project-name <name> --branch <branch>`. `wrangler` is a pinned root `devDependency`, invoked via `pnpm exec wrangler`.
+
+Cloudflare Pages distinguishes a production deployment (branch matches the project's production branch) from a preview deployment (any other branch), each with its own public `*.pages.dev` URL — so one project per app covers every environment, with only the sourced values file differing per environment. Build-time `VITE_*` variables are exported into the shell before the build so Vite inlines them into `import.meta.env`; only public-classified values are ever declared in the example values files (`.cloudflare/.env.deploy.web.example`, `.cloudflare/.env.deploy.landing.example`) — never a secret credential. `.cloudflare/README.md` documents the procedure, the secret-value restriction, the `CORS_ORIGIN` multi-origin format the backend expects, and a "Current deployments" table recording each app's public URL per environment.
 
 ## Terraform
 

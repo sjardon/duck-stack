@@ -444,7 +444,7 @@ Dejar el backend `services` corriendo en DigitalOcean App Platform a partir de u
 
 ## INFRA-009 — Hosting de `web` y `landing` en Cloudflare Pages
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

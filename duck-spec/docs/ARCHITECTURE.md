@@ -24,8 +24,8 @@ pnpm workspace monorepo orchestrated by Turborepo.
 
 | Service | Technology | Role |
 |---------|-----------|------|
-| `apps/web` | Vite + React + TypeScript, React Query, Zustand | Main SPA for authenticated users |
-| `apps/landing` | Vite + React + TypeScript | Public marketing SPA |
+| `apps/web` | Vite + React + TypeScript, React Query, Zustand | Main SPA for authenticated users. Static build deployed to its own Cloudflare Pages project (INFRA-009). |
+| `apps/landing` | Vite + React + TypeScript | Public marketing SPA. Static build deployed to its own Cloudflare Pages project (INFRA-009). |
 | `apps/services` | Fastify + TypeScript | Backend API. Containerised; deployed to AWS App Runner via ECR. |
 
 ## External integrations
@@ -42,6 +42,8 @@ pnpm workspace monorepo orchestrated by Turborepo.
 `apps/web` calls `apps/services` over HTTP using the `VITE_API_URL` environment variable as the base URL. All calls are routed through `api/client.ts` (`apiFetch`). In development `VITE_API_URL` defaults to `http://localhost:3000`; in production it points to the backend's DigitalOcean App Platform public URL (INFRA-008; see `duck-spec/docs/INFRASTRUCTURE.md`), not the previously planned App Runner URL.
 
 Authenticated requests include an `Authorization: Bearer <token>` header. `api/client.ts` reads the token from `useSessionStore.token()`, which wraps Clerk's `getToken()`. `apps/services` verifies the token in a global `onRequest` hook before any route handler runs.
+
+Since `apps/web` and `apps/landing` are each served from their own Cloudflare Pages public URL (INFRA-009), `apps/services`' `serverConfig.corsOrigin` accepts a comma-separated `CORS_ORIGIN` value and resolves it to a `string[]` so `@fastify/cors` matches either origin; a single value (including the `'*'` default) is unaffected.
 
 ## Shared packages
 
