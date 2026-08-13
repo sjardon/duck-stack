@@ -1,0 +1,141 @@
+# DigitalOcean App Platform specification for the `services` backend (INFRA-008).
+#
+# This file is the single versioned source of truth for the application's
+# configuration (R001, NF001). Every value that differs per environment, or
+# that must never be committed to the repository (R008, NF003), is expressed
+# as a shell-style placeholder (see below) instead of a literal.
+# `.do/deploy.sh` renders this template with `envsubst`, substituting the
+# placeholders from a local,
+# git-ignored values file (see `.do/.env.deploy.example`), and applies the
+# rendered spec with `doctl apps create --spec <rendered> --upsert --wait`.
+#
+# Do not edit a running application through the DigitalOcean console: those
+# changes are not durable and are overwritten by the next deploy (EC005). See
+# `.do/README.md` for the full procedure.
+name: ${DO_APP_NAME}
+region: nyc
+services:
+  - name: services
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+
+    # Build context: the platform clones the whole repository and builds with
+    # the repo root as Docker context, so the Dockerfile's root-relative COPY
+    # instructions (package.json, pnpm-workspace.yaml, pnpm-lock.yaml, and the
+    # packages/*/package.json files) resolve (R004, R005, EC001).
+    source_dir: /
+    dockerfile_path: apps/services/Dockerfile
+
+    github:
+      repo: ${GITHUB_REPO}
+      branch: ${GIT_BRANCH}
+      # Automatic deploy on push is out of scope for this feature (INFRA-012):
+      # every deploy is triggered by the documented manual procedure only.
+      deploy_on_push: false
+
+    # The platform HTTP port and the health check port both resolve from the
+    # same ${PORT} placeholder as the PORT env var below, so a port/health
+    # check mismatch is structurally impossible (EC006).
+    http_port: ${PORT}
+    health_check:
+      http_path: /health
+      port: ${PORT}
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      # --- serverConfig ---
+      - key: NODE_ENV
+        scope: RUN_TIME
+        type: general
+        value: ${NODE_ENV}
+      - key: LOG_LEVEL
+        scope: RUN_TIME
+        type: general
+        value: ${LOG_LEVEL}
+      - key: HOST
+        scope: RUN_TIME
+        type: general
+        value: ${HOST}
+      - key: PORT
+        scope: RUN_TIME
+        type: general
+        value: ${PORT}
+      - key: CORS_ORIGIN
+        scope: RUN_TIME
+        type: general
+        value: ${CORS_ORIGIN}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: secret
+        value: ${DATABASE_URL}
+
+      # --- authConfig (Clerk) ---
+      - key: CLERK_SECRET_KEY
+        scope: RUN_TIME
+        type: secret
+        value: ${CLERK_SECRET_KEY}
+      - key: CLERK_JWT_KEY
+        scope: RUN_TIME
+        type: secret
+        value: ${CLERK_JWT_KEY}
+      - key: CLERK_WEBHOOK_SIGNING_SECRET
+        scope: RUN_TIME
+        type: secret
+        value: ${CLERK_WEBHOOK_SIGNING_SECRET}
+
+      # --- email (SES adapter) ---
+      - key: EMAIL_SENDER_ADDRESS
+        scope: RUN_TIME
+        type: general
+        value: ${EMAIL_SENDER_ADDRESS}
+      # SES_REGION is a decommissioned-AWS placeholder (EC004): the container
+      # needs a value to start (resolveNotifier's startup validation, EC002),
+      # but the value is inert until the email adapter is migrated off SES.
+      - key: SES_REGION
+        scope: RUN_TIME
+        type: general
+        value: ${SES_REGION}
+
+      # --- mobbexConfig / billing ---
+      - key: BILLING_PROVIDER
+        scope: RUN_TIME
+        type: general
+        value: ${BILLING_PROVIDER}
+      - key: MOBBEX_API_KEY
+        scope: RUN_TIME
+        type: secret
+        value: ${MOBBEX_API_KEY}
+      - key: MOBBEX_ACCESS_TOKEN
+        scope: RUN_TIME
+        type: secret
+        value: ${MOBBEX_ACCESS_TOKEN}
+      - key: MOBBEX_TEST_MODE
+        scope: RUN_TIME
+        type: general
+        value: ${MOBBEX_TEST_MODE}
+      - key: MOBBEX_TIMEOUT_MS
+        scope: RUN_TIME
+        type: general
+        value: ${MOBBEX_TIMEOUT_MS}
+      - key: MOBBEX_WEBHOOK_SECRET
+        scope: RUN_TIME
+        type: secret
+        value: ${MOBBEX_WEBHOOK_SECRET}
+
+      # --- subscriptionsConfig ---
+      - key: SIGNUP_MODE
+        scope: RUN_TIME
+        type: general
+        value: ${SIGNUP_MODE}
+      - key: FREE_TRIAL_DAYS
+        scope: RUN_TIME
+        type: general
+        value: ${FREE_TRIAL_DAYS}
+      - key: STRICT_ENTITLEMENTS_ON_PAST_DUE
+        scope: RUN_TIME
+        type: general
+        value: ${STRICT_ENTITLEMENTS_ON_PAST_DUE}
