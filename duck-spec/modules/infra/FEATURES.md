@@ -53,7 +53,7 @@ Crear la estructura base del monorepo con Turborepo, las tres apps y los paquete
 
 ## INFRA-002 — AWS Base Infrastructure (Terraform)
 
-**Estado:** DONE
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -97,11 +97,15 @@ Configurar la infraestructura base en AWS con Terraform: VPC, ECR y App Runner p
 
 - INFRA-001 — el `services` app que se despliega debe existir primero
 
+### Deprecación
+
+Este diseño de VPC, ECR y App Runner en Terraform fue definido por completo pero nunca aplicado ni operado (never applied, never operated): no se ejecutó jamás un `terraform apply`, por lo que ningún recurso de AWS llegó a existir. Esta baja retira infraestructura-como-código sin usar, no infraestructura corriendo. La capa de compute del backend fue reemplazada por INFRA-008 (DigitalOcean App Platform). El árbol de Terraform fue eliminado del repositorio por INFRA-010.
+
 ---
 
 ## INFRA-003 — Static Hosting (S3 + CloudFront)
 
-**Estado:** DONE
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -143,11 +147,15 @@ Provisionar con Terraform dos distribuciones CloudFront respaldadas por buckets 
 
 - INFRA-001 — las apps `web` y `landing` que se despliegan deben existir primero
 
+### Deprecación
+
+Este diseño de S3 + CloudFront en Terraform fue definido por completo pero nunca aplicado ni operado (never applied, never operated): no se ejecutó jamás un `terraform apply`, por lo que ningún bucket ni distribución llegó a existir. Esta baja retira infraestructura-como-código sin usar, no infraestructura corriendo. El hosting estático de `web` y `landing` fue reemplazado por INFRA-009 (Cloudflare Pages). El árbol de Terraform fue eliminado del repositorio por INFRA-010.
+
 ---
 
 ## INFRA-004 — CI/CD Pipeline (GitHub Actions)
 
-**Estado:** DONE
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -193,11 +201,15 @@ Configurar workflows de GitHub Actions para build, deploy automático por merge 
 - INFRA-002 — ECR y App Runner deben existir en ambos environments
 - INFRA-003 — buckets S3 y distribuciones CloudFront deben existir en ambos environments
 
+### Deprecación
+
+A diferencia de INFRA-002/003, estos workflows sí llegaron a ejecutarse — pero siempre contra recursos de AWS que nunca existieron, y siempre fallando desde que el compute y el hosting estático se movieron fuera de AWS (INFRA-008, INFRA-009). Esta baja retira la automatización de deploy hacia AWS; no existe todavía un pipeline automático de reemplazo — queda a cargo de INFRA-012 (forward-linked, aún no construida), mientras tanto el deploy es manual vía los procedimientos de INFRA-008 y INFRA-009. Los seis workflows fueron eliminados del repositorio por INFRA-010.
+
 ---
 
 ## INFRA-005 — SES Email Infrastructure (Terraform)
 
-**Estado:** TODO
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -259,11 +271,15 @@ Provisionar en Terraform la identidad SES de dominio, el permiso de envío para 
 - INFRA-002 — el servicio de App Runner y su instance role deben existir
 - NOTIFICATIONS-001 — define las variables de entorno que consume el adapter de email
 
+### Deprecación
+
+Este diseño de infraestructura de SES en Terraform queda abandonado junto con el resto de la huella de AWS retirada por INFRA-010. La necesidad subyacente — el envío de emails — no queda abandonada: la cubre ahora **NOTIFICATIONS-002**, que reemplaza el adapter SES por otro proveedor sin depender de esta infraestructura Terraform.
+
 ---
 
 ## INFRA-006 — SES Delivery Observability
 
-**Estado:** TODO
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -318,11 +334,15 @@ Dotar al envío de emails de métricas de entrega consultables y endurecer la co
 
 - INFRA-005 — la identidad SES debe existir para poder asociarle el conjunto de configuración
 
+### Deprecación
+
+Este diseño de observabilidad de entrega de SES en Terraform queda abandonado junto con el resto de la huella de AWS retirada por INFRA-010. La necesidad subyacente — observabilidad y alertas sobre la entrega de emails — no queda abandonada: la cubre ahora **INFRA-011**, sin depender de esta infraestructura Terraform ni de SES.
+
 ---
 
 ## INFRA-007 — Alerting Foundation
 
-**Estado:** TODO
+**Estado:** DEPRECATED
 
 ### Contexto
 
@@ -377,6 +397,10 @@ Proveer un canal de alertas genérico por environment, reusable por cualquier co
 ### Dependencias
 
 - INFRA-006 — las métricas de rebote y queja deben existir para poder alarmarlas
+
+### Deprecación
+
+Este diseño de canal de alertas genérico en Terraform queda abandonado junto con el resto de la huella de AWS retirada por INFRA-010. La necesidad subyacente — un canal de alertas reusable para toda la infraestructura, con las tasas de rebote/queja de email como primer consumidor — no queda abandonada: la cubre ahora **INFRA-011**.
 
 ---
 
@@ -500,7 +524,7 @@ Servir `web` y `landing` como SPAs estáticas desde Cloudflare Pages, con el enr
 
 ## INFRA-010 — Retiro de la infraestructura de AWS
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
