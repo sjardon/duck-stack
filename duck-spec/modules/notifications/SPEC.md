@@ -37,4 +37,4 @@ On the Clerk `user.created` webhook, `dispatchClerkEvent` calls `notifier.send({
 
 ### Out of scope (current state)
 
-The module does not yet track delivery state, bounces, complaints, or opens; has no durable queue or worker (sends are in-process, fire-and-forget, within the single App Runner process); has no user notification preferences or opt-out; supports no channel other than email; and has no scheduling, batching, attachments, or admin/preview UI.
+The module does not yet track delivery state, bounces, complaints, or opens; has no durable queue or worker (sends are in-process, fire-and-forget, within the single backend process); has no user notification preferences or opt-out; supports no channel other than email; and has no scheduling, batching, attachments, or admin/preview UI.

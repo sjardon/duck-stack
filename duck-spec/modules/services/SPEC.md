@@ -113,7 +113,7 @@ All files under `apps/services/src/` follow lowercase camelCase naming with no d
 
 ### Health module
 
-`modules/health/routes.ts` registers `GET /health`, which responds with `{ status: 'ok', timestamp: <ISO string> }` from memory with no I/O. This endpoint serves as the canonical reference implementation of the vertical-slicing module convention and satisfies the App Runner health-check path.
+`modules/health/routes.ts` registers `GET /health`, which responds with `{ status: 'ok', timestamp: <ISO string> }` from memory with no I/O. This endpoint serves as the canonical reference implementation of the vertical-slicing module convention and satisfies DigitalOcean App Platform's health-check path (INFRA-008).
 
 Response time is well under 100 ms because the handler performs no external calls or I/O operations.
 
@@ -170,4 +170,4 @@ Every handler, webhook route, use case, and plugin in the orchestration layer sa
 1. **builder** stage — `node:20-alpine`, installs all workspace dependencies, compiles TypeScript with `tsc`.
 2. **runner** stage — `node:20-alpine`, copies only `dist/` and `node_modules/`, sets `NODE_ENV=production`, exposes port `3000`, runs `node dist/server.js`.
 
-The image is structured for deployment on AWS App Runner: binds to `0.0.0.0:3000` and exposes `/health` as the health-check path.
+The image is structured for deployment on DigitalOcean App Platform (INFRA-008): binds to `0.0.0.0:3000` and exposes `/health` as the health-check path.
