@@ -1,6 +1,6 @@
 const env = process.env || {};
 
 export const emailConfig = {
-  sesRegion: env.SES_REGION ?? 'us-east-1',
+  resendApiKey: env.RESEND_API_KEY ?? '',
   senderEmail: env.EMAIL_SENDER_ADDRESS ?? '',
 };

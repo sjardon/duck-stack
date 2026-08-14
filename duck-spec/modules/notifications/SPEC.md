@@ -19,17 +19,19 @@ Templates live under `apps/services/src/modules/notifications/templates/` and ar
 - `emailTemplateRegistry.ts` maps each `EmailTemplateId` to its `{ subject, Component }`. Today the only registered id is `welcome` (`welcomeEmail.tsx`).
 - `renderEmailTemplate(templateId, context)` looks the id up in the registry and returns `undefined` when it is not registered — this is the mechanism that lets an unknown template id be handled without throwing.
 
-### SES adapter
+### Resend adapter
 
-`SesEmailNotifier` (`apps/services/src/modules/notifications/providers/sesEmailNotifier.ts`) is the only implementation of `EmailNotifier`, delivering through AWS SES v2 (`@aws-sdk/client-sesv2`). It is resolved as a singleton by `resolveNotifier()`, which builds the instance from `emailConfig` (SES region, sender address) and fails fast at first call if the sender address is not configured.
+`ResendEmailNotifier` (`apps/services/src/modules/notifications/providers/resendEmailNotifier.ts`) is the only implementation of `EmailNotifier`, delivering through Resend's Node SDK. It is resolved as a singleton by `resolveNotifier()`, which builds the instance from `emailConfig` (Resend API key, sender address) and fails fast at first call if either the API key or the sender address is not configured.
 
 `send()` is the mandatory fire-and-forget wrapper: it invokes a private `dispatch()` without awaiting it and attaches a `.catch()` that logs and stops, so no rejection ever reaches the caller. `dispatch()`:
 
 1. Validates the recipient address; a missing or malformed address is logged and dispatch stops (silent-fail, no delivery attempt).
 2. Calls `renderEmailTemplate()`; an unregistered template id is logged (with the template id) and dispatch stops without throwing.
-3. Sends a `SendEmailCommand` through `SESv2Client`. A provider error or timeout is logged with the original error and stack, then re-thrown as `ProviderError`, which is swallowed by `send()`'s wrapper.
+3. Calls `resend.emails.send()` with both the HTML and plain-text bodies. Because the Resend SDK reports API-level failures (invalid API key, unverified sender domain, rate limit) by resolving with a truthy `error` field instead of rejecting, `dispatch()` treats that field as a thrown value so both a rejected promise and an SDK-returned error funnel through the same `catch`, which logs the original error and re-throws it as `ProviderError`, swallowed by `send()`'s wrapper.
 
-No log line emitted by `SesEmailNotifier` includes the recipient address, template context, subject, or rendered body — only the template id and, on failure, the error.
+No log line emitted by `ResendEmailNotifier` includes the recipient address, template context, subject, or rendered body — only the template id and, on failure, the error.
+
+Only one `EmailNotifier` adapter is wired at a time — `SesEmailNotifier` and the `@aws-sdk/client-sesv2` dependency it used are removed from the codebase (NOTIFICATIONS-002).
 
 ### Welcome email
 

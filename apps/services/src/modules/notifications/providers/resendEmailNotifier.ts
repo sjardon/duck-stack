@@ -1,4 +1,4 @@
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { Resend } from 'resend';
 import type { EmailNotifier, EmailTemplateId, SendEmailInput } from '@repo/types';
 import { renderEmailTemplate } from '../templates/renderEmailTemplate.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
@@ -7,17 +7,17 @@ import { ProviderError } from '../../../shared/errors.js';
 // A conservative "looks like an email" check — not full RFC 5322 validation (EC002).
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export interface SesEmailNotifierConfig {
-  region: string;
+export interface ResendEmailNotifierConfig {
+  apiKey: string;
   senderEmail: string;
 }
 
-export class SesEmailNotifier implements EmailNotifier {
-  private readonly client: SESv2Client;
+export class ResendEmailNotifier implements EmailNotifier {
+  private readonly client: Resend;
   private readonly senderEmail: string;
 
-  constructor(config: SesEmailNotifierConfig) {
-    this.client = new SESv2Client({ region: config.region });
+  constructor(config: ResendEmailNotifierConfig) {
+    this.client = new Resend(config.apiKey);
     this.senderEmail = config.senderEmail;
   }
 
@@ -51,26 +51,26 @@ export class SesEmailNotifier implements EmailNotifier {
     }
 
     try {
-      await this.client.send(
-        new SendEmailCommand({
-          FromEmailAddress: this.senderEmail,
-          Destination: { ToAddresses: [to] },
-          Content: {
-            Simple: {
-              Subject: { Data: rendered.subject },
-              Body: {
-                Html: { Data: rendered.html },
-                Text: { Data: rendered.text },
-              },
-            },
-          },
-        }),
-      );
+      const { error } = await this.client.emails.send({
+        from: this.senderEmail,
+        to: [to],
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+
+      // Resend does not reject on API-level failures (invalid API key,
+      // unverified domain, rate limit) — it resolves with a truthy `error`
+      // field instead. Bridge that shape into the catch below so both failure
+      // modes funnel through the same adapter error-handling path.
+      if (error) {
+        throw error;
+      }
     } catch (err) {
       // Adapter error-handling rule: log the original error/stack, then re-throw
-      // a typed DomainError (R005, EC003, NF003 — only templateId/err, no PII).
-      logger.error({ templateId, err }, 'Failed to send email via SES');
-      throw new ProviderError('Failed to send email via SES', 502, err);
+      // a typed DomainError (R005, EC001-EC003, NF003 — only templateId/err, no PII).
+      logger.error({ templateId, err }, 'Failed to send email via Resend');
+      throw new ProviderError('Failed to send email via Resend', 502, err);
     }
   }
 }

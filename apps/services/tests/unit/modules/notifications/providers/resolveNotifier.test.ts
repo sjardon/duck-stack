@@ -5,7 +5,7 @@
  */
 
 const validEnv = {
-  SES_REGION: 'us-east-1',
+  RESEND_API_KEY: 're_test_key',
   EMAIL_SENDER_ADDRESS: 'noreply@example.com',
 };
 
@@ -26,7 +26,7 @@ function setEnv(overrides: Partial<typeof validEnv> & Record<string, string | un
 }
 
 function clearEmailEnv() {
-  delete process.env['SES_REGION'];
+  delete process.env['RESEND_API_KEY'];
   delete process.env['EMAIL_SENDER_ADDRESS'];
 }
 
@@ -39,9 +39,9 @@ afterEach(() => {
   clearEmailEnv();
 });
 
-// T016 — R003
-describe('resolveNotifier — cached singleton (R003)', () => {
-  it('WHEN resolveNotifier() is called twice THEN both calls return the same SesEmailNotifier instance, constructed from emailConfig sesRegion/senderEmail', async () => {
+// T017 — R003, R004, R006, EC006
+describe('resolveNotifier — cached singleton (R003, R004, R006, EC006)', () => {
+  it('WHEN resolveNotifier() is called twice THEN both calls return the same ResendEmailNotifier instance, constructed from emailConfig resendApiKey/senderEmail', async () => {
     setEnv({});
     const resolveNotifier = await importResolveNotifier();
 
@@ -50,6 +50,7 @@ describe('resolveNotifier — cached singleton (R003)', () => {
 
     expect(first).toBe(second);
     expect(typeof first.send).toBe('function');
+    expect(first.constructor.name).toBe('ResendEmailNotifier');
   });
 
   it('throws a descriptive Error when EMAIL_SENDER_ADDRESS is missing (fail-fast)', async () => {
@@ -58,5 +59,13 @@ describe('resolveNotifier — cached singleton (R003)', () => {
 
     expect(() => resolveNotifier()).toThrow(Error);
     expect(() => resolveNotifier()).toThrow(/EMAIL_SENDER_ADDRESS/);
+  });
+
+  it('throws a descriptive Error when RESEND_API_KEY is missing (fail-fast)', async () => {
+    setEnv({ RESEND_API_KEY: undefined });
+    const resolveNotifier = await importResolveNotifier();
+
+    expect(() => resolveNotifier()).toThrow(Error);
+    expect(() => resolveNotifier()).toThrow(/RESEND_API_KEY/);
   });
 });

@@ -11,14 +11,14 @@
 #                                from the repo root using that Dockerfile
 #   T007 (R006)                — envs declares exactly the 19 required keys, each with
 #                                scope RUN_TIME and value "${<KEY>}"
-#   T009 (R008)                — the 7 sensitive keys are type: secret, every other
+#   T009 (R008)                — the 8 sensitive keys are type: secret, every other
 #                                declared key is type: general
 #   T011 (R009, EC006)         — health_check.http_path == "/health" and both
 #                                health_check.port and http_port resolve to the same
 #                                placeholder as the PORT env entry's value
-#   T013 (EC004)                — the SES_REGION entry is immediately preceded by a
-#                                comment referencing the decommissioned AWS SES
-#                                integration
+#   T013 (EC004)                — the RESEND_API_KEY entry is immediately preceded by a
+#                                comment referencing its startup fail-fast requirement
+#                                (NOTIFICATIONS-002 EC002)
 #
 # This is the "test" phase of INFRA-008: .do/app.yaml does not exist yet, so every
 # assertion below is expected to FAIL until the "implement" phase creates it.
@@ -101,7 +101,7 @@ check("T005", svc.get("dockerfile_path") == "apps/services/Dockerfile",
 REQUIRED_ENV_KEYS = [
     "NODE_ENV", "LOG_LEVEL", "HOST", "PORT", "CORS_ORIGIN", "DATABASE_URL",
     "CLERK_SECRET_KEY", "CLERK_JWT_KEY", "CLERK_WEBHOOK_SIGNING_SECRET",
-    "EMAIL_SENDER_ADDRESS", "SES_REGION", "BILLING_PROVIDER",
+    "EMAIL_SENDER_ADDRESS", "RESEND_API_KEY", "BILLING_PROVIDER",
     "MOBBEX_API_KEY", "MOBBEX_ACCESS_TOKEN", "MOBBEX_TEST_MODE",
     "MOBBEX_TIMEOUT_MS", "MOBBEX_WEBHOOK_SECRET", "SIGNUP_MODE",
     "FREE_TRIAL_DAYS", "STRICT_ENTITLEMENTS_ON_PAST_DUE",
@@ -135,7 +135,7 @@ for key in REQUIRED_ENV_KEYS:
 # T009 (R008)
 SECRET_KEYS = {
     "DATABASE_URL", "CLERK_SECRET_KEY", "CLERK_JWT_KEY",
-    "CLERK_WEBHOOK_SIGNING_SECRET", "MOBBEX_API_KEY",
+    "CLERK_WEBHOOK_SIGNING_SECRET", "RESEND_API_KEY", "MOBBEX_API_KEY",
     "MOBBEX_ACCESS_TOKEN", "MOBBEX_WEBHOOK_SECRET",
 }
 for key in REQUIRED_ENV_KEYS:
@@ -184,19 +184,19 @@ else
   skip "T005: docker is not available or its daemon is not reachable; skipping the build check"
 fi
 
-# --- T013 (EC004): SES_REGION preceded by a decommissioned-AWS-SES comment ---
+# --- T013 (EC004): RESEND_API_KEY preceded by a startup fail-fast comment ---
 if [ -f "$SPEC_FILE" ]; then
-  line_no="$(grep -n 'key:[[:space:]]*SES_REGION' "$SPEC_FILE" | head -1 | cut -d: -f1)"
+  line_no="$(grep -n 'key:[[:space:]]*RESEND_API_KEY' "$SPEC_FILE" | head -1 | cut -d: -f1)"
   if [ -z "$line_no" ]; then
-    fail "T013: no 'key: SES_REGION' entry found in $SPEC_FILE"
+    fail "T013: no 'key: RESEND_API_KEY' entry found in $SPEC_FILE"
   else
     prev_line_no=$((line_no - 1))
     prev_line="$(sed -n "${prev_line_no}p" "$SPEC_FILE")"
     trimmed="$(printf '%s' "$prev_line" | sed -e 's/^[[:space:]]*//')"
-    if [[ "$trimmed" == \#* ]] && printf '%s' "$trimmed" | grep -qiE 'ses|aws'; then
-      pass "T013: the line immediately before 'key: SES_REGION' is a comment referencing the decommissioned AWS SES integration"
+    if [[ "$trimmed" == \#* ]] && printf '%s' "$trimmed" | grep -qiE 'ec002|fail'; then
+      pass "T013: the line immediately before 'key: RESEND_API_KEY' is a comment referencing its startup fail-fast requirement"
     else
-      fail "T013: expected the line immediately before 'key: SES_REGION' (line $line_no of $SPEC_FILE) to be a comment mentioning AWS SES, got: '$prev_line'"
+      fail "T013: expected the line immediately before 'key: RESEND_API_KEY' (line $line_no of $SPEC_FILE) to be a comment mentioning the startup fail-fast requirement (EC002), got: '$prev_line'"
     fi
   fi
 else

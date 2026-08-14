@@ -87,18 +87,17 @@ services:
         type: secret
         value: ${CLERK_WEBHOOK_SIGNING_SECRET}
 
-      # --- email (SES adapter) ---
+      # --- email (Resend adapter) ---
       - key: EMAIL_SENDER_ADDRESS
         scope: RUN_TIME
         type: general
         value: ${EMAIL_SENDER_ADDRESS}
-      # SES_REGION is a decommissioned-AWS placeholder (EC004): the container
-      # needs a value to start (resolveNotifier's startup validation, EC002),
-      # but the value is inert until the email adapter is migrated off SES.
-      - key: SES_REGION
+      # RESEND_API_KEY is required for resolveNotifier's startup validation
+      # (EC002): the container fails fast at boot if it is missing.
+      - key: RESEND_API_KEY
         scope: RUN_TIME
-        type: general
-        value: ${SES_REGION}
+        type: secret
+        value: ${RESEND_API_KEY}
 
       # --- mobbexConfig / billing ---
       - key: BILLING_PROVIDER
