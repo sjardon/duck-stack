@@ -71,7 +71,7 @@ Dar a los módulos del backend un mecanismo para enviar emails transaccionales a
 
 ## NOTIFICATIONS-002 — Migración del envío de email a Resend
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

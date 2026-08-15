@@ -10,7 +10,6 @@
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "^3.0.0",
     "@clerk/backend": "^1.0.0",
     "@fastify/cors": "^9.0.0",
     "@fastify/helmet": "^11.0.0",
@@ -23,6 +22,7 @@
     "postgres": "^3.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "resend": "^6.0.0",
     "svix": "^1.0.0",
     "zod": "^4.4.3"
   },

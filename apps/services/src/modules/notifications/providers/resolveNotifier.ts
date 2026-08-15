@@ -1,5 +1,5 @@
 import type { EmailNotifier } from '@repo/types';
-import { SesEmailNotifier } from './sesEmailNotifier.js';
+import { ResendEmailNotifier } from './resendEmailNotifier.js';
 import { emailConfig } from '../../../shared/configs/emailConfig.js';
 
 // Singleton — built once at first call; runtime env changes are ignored, mirroring
@@ -11,19 +11,23 @@ export function resolveNotifier(): EmailNotifier {
     return cachedNotifier;
   }
 
-  cachedNotifier = createSesEmailNotifier();
+  cachedNotifier = createResendEmailNotifier();
   return cachedNotifier;
 }
 
-function createSesEmailNotifier(): SesEmailNotifier {
-  const senderEmail = emailConfig.senderEmail;
+function createResendEmailNotifier(): ResendEmailNotifier {
+  const { resendApiKey, senderEmail } = emailConfig;
+
+  if (!resendApiKey) {
+    throw new Error('Missing required env var: RESEND_API_KEY');
+  }
 
   if (!senderEmail) {
     throw new Error('Missing required env var: EMAIL_SENDER_ADDRESS');
   }
 
-  return new SesEmailNotifier({
-    region: emailConfig.sesRegion,
+  return new ResendEmailNotifier({
+    apiKey: resendApiKey,
     senderEmail,
   });
 }
