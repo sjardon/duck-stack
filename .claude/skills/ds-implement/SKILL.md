@@ -151,3 +151,4 @@ Do not make changes beyond what is needed to resolve the reported findings.
 - Never violate technical constraints or implement out-of-scope items from analysis.md.
 - Always return the full context object, not just the result field.
 - On any unrecoverable error, set `status: "failure"` and populate `error` with the full detail.
+- Nunca citar R-ID/NF-ID en comentarios de código de producción.

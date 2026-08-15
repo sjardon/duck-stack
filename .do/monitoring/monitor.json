@@ -1,0 +1,8 @@
+{
+  "monitor_type": "status",
+  "url": "${BETTERSTACK_MONITOR_URL}",
+  "pronounceable_name": "duck-stack backend (${DO_APP_NAME})",
+  "email": true,
+  "check_frequency": ${BETTERSTACK_CHECK_FREQUENCY_SECONDS},
+  "request_timeout": ${BETTERSTACK_CHECK_TIMEOUT_SECONDS}
+}

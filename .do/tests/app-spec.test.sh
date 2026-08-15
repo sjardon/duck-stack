@@ -20,8 +20,16 @@
 #                                comment referencing its startup fail-fast requirement
 #                                (NOTIFICATIONS-002 EC002)
 #
+# INFRA011-T001 (R005, R006, R007, R008) — services[0].log_destinations contains
+#                                exactly one entry with a non-empty `name` and
+#                                `logtail.token == "${BETTERSTACK_LOGS_TOKEN}"`
+#                                (INFRA-011).
+#
 # This is the "test" phase of INFRA-008: .do/app.yaml does not exist yet, so every
 # assertion below is expected to FAIL until the "implement" phase creates it.
+# INFRA011-T001's assertions are the "test" phase of INFRA-011: .do/app.yaml does
+# not yet declare a `log_destinations` block, so that assertion is expected to
+# FAIL until INFRA-011's "implement" phase adds it.
 #
 # Run: bash .do/tests/app-spec.test.sh
 
@@ -159,6 +167,24 @@ check("T011", port_env_value is not None and http_port == port_env_value,
       f"expected services[0].http_port == PORT env value ({port_env_value!r}), got {http_port!r}")
 check("T011", port_env_value is not None and health_port == port_env_value,
       f"expected services[0].health_check.port == PORT env value ({port_env_value!r}), got {health_port!r}")
+
+# INFRA011-T001 (R005, R006, R007, R008)
+log_destinations = svc.get("log_destinations")
+check("INFRA011-T001", isinstance(log_destinations, list) and len(log_destinations) == 1,
+      f"expected services[0].log_destinations to contain exactly 1 entry, got "
+      f"{len(log_destinations) if isinstance(log_destinations, list) else type(log_destinations).__name__}")
+
+ld = (log_destinations[0]
+      if isinstance(log_destinations, list) and len(log_destinations) == 1
+      and isinstance(log_destinations[0], dict) else {})
+check("INFRA011-T001", bool(ld.get("name")),
+      f"expected services[0].log_destinations[0].name to be a non-empty value, got {ld.get('name')!r}")
+
+logtail = ld.get("logtail") if isinstance(ld, dict) else None
+logtail_token = logtail.get("token") if isinstance(logtail, dict) else None
+check("INFRA011-T001", logtail_token == "${BETTERSTACK_LOGS_TOKEN}",
+      f"expected services[0].log_destinations[0].logtail.token == '${{BETTERSTACK_LOGS_TOKEN}}', "
+      f"got {logtail_token!r}")
 PYEOF
 )"
 
