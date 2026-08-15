@@ -2,6 +2,19 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
 import { DomainError, QuotaExceededError, TrialExpiredError, ServiceUnavailableError } from '../errors.js';
 import { logger } from '../infrastructure/logger.js';
+import { requestContext } from '../infrastructure/requestContext.js';
+import { errorReporter } from '../providers/errorReporter.js';
+
+// Reporting must never affect the reply: a synchronous throw from the
+// reporter (e.g. its own internal failure isolation misbehaving) is swallowed
+// here so the HTTP response is always sent regardless.
+function reportError(error: unknown): void {
+  try {
+    errorReporter.report(error, { requestId: requestContext.getStore()?.requestId });
+  } catch (err) {
+    logger.error({ err }, 'Failed to report error to error tracking provider');
+  }
+}
 
 function logError(error: unknown): void {
   if (error instanceof DomainError) {
@@ -26,6 +39,7 @@ function logError(error: unknown): void {
         },
         'Domain error (server)',
       );
+      reportError(error);
     }
   } else {
     logger.error(
@@ -36,6 +50,7 @@ function logError(error: unknown): void {
       },
       'Unhandled error',
     );
+    reportError(error);
   }
 }
 

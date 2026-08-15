@@ -171,3 +171,16 @@ Every handler, webhook route, use case, and plugin in the orchestration layer sa
 2. **runner** stage — `node:20-alpine`, copies only `dist/` and `node_modules/`, sets `NODE_ENV=production`, exposes port `3000`, runs `node dist/server.js`.
 
 The image is structured for deployment on DigitalOcean App Platform (INFRA-008): binds to `0.0.0.0:3000` and exposes `/health` as the health-check path.
+
+### Error tracking (SERVICES-011)
+
+Unhandled and fire-and-forget exceptions are reported to an error tracking provider (Better Stack, Sentry-SDK-compatible) behind the provider-agnostic `IErrorReporter` port defined in `shared/providers/errorReporter.ts` (`report(error, { requestId? })`). A module-scope singleton `errorReporter` is created eagerly at import time by `createErrorReporter()`: when `ERROR_TRACKING_DSN` (`errorTrackingConfig`) is set it resolves to `SentryErrorReporter` (wraps `@sentry/node`, `Sentry.init()` called once at module load), otherwise to `NoopErrorReporter`, so the instrumentation is opt-in and its absence never blocks startup.
+
+Two cross-cutting call sites report explicitly — no automatic Fastify/HTTP integration is registered:
+
+- `shared/plugins/errorHandler.ts` — `logError`'s two `error`-level branches (`DomainError` ≥500 and non-`DomainError`) call `errorReporter.report(error, { requestId })` right after logging; the `warn` branch (`DomainError` <500) never reports, so expected 4xx domain errors do not reach the provider.
+- `modules/notifications/providers/resendEmailNotifier.ts` — the fire-and-forget `.catch()` on `dispatch()` calls `errorReporter.report(err, { requestId })` instead of swallowing the failure silently, closing the blind spot where a dropped email previously produced no signal beyond a log line.
+
+`requestId` is read from the same `AsyncLocalStorage` store used for logging (`requestContext.getStore()?.requestId`) at both call sites and attached as a Sentry tag when present; when a report originates outside a request lifecycle the tag is simply omitted rather than blocking the report.
+
+`SentryErrorReporter` sets `environment`/`release` (`SERVICE_VERSION`, defaulting to `'unknown'`) once in `Sentry.init(...)` so every report carries them, and relies on Sentry's default stack-trace-based grouping (no custom fingerprint override) to collapse repeated occurrences of the same condition into one issue. No secrets, tokens, or PII are transmitted: no Sentry request-data integration is registered, `sendDefaultPii` is explicitly `false`, and `beforeSend` strips `event.request`/`event.user` as defense in depth. A local `ErrorOccurrenceSampler` (`shared/providers/errorOccurrenceSampler.ts`) gates repeat occurrences of the same fingerprint through `errorTrackingConfig.sampleRate` inside `beforeSend`, but always sends a fingerprint's first occurrence, bounding provider quota usage without ever silently dropping a new failure. `report()` is synchronous/void and wraps the SDK call in `try/catch`, so provider latency or failure never blocks the HTTP response or changes the outcome of any request.

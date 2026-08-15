@@ -29,13 +29,31 @@ jest.mock('../../../../src/shared/infrastructure/requestContext.js', () => ({
   },
 }));
 
+// Mock errorReporter to assert reporting calls without hitting a real provider
+jest.mock('../../../../src/shared/providers/errorReporter.js', () => ({
+  errorReporter: {
+    report: jest.fn(),
+  },
+}));
+
 import { logger } from '../../../../src/shared/infrastructure/logger.js';
+import { requestContext } from '../../../../src/shared/infrastructure/requestContext.js';
+import { errorReporter } from '../../../../src/shared/providers/errorReporter.js';
 import errorHandlerPlugin from '../../../../src/shared/plugins/errorHandler.js';
 
 const mockLogger = logger as unknown as {
   warn: jest.Mock;
   error: jest.Mock;
   info: jest.Mock;
+};
+
+const mockRequestContext = requestContext as unknown as {
+  getStore: jest.Mock;
+  run: jest.Mock;
+};
+
+const mockErrorReporter = errorReporter as unknown as {
+  report: jest.Mock;
 };
 
 async function buildApp(): Promise<FastifyInstance> {
@@ -46,6 +64,7 @@ async function buildApp(): Promise<FastifyInstance> {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRequestContext.getStore.mockReturnValue(null);
 });
 
 // T004 — R004, R005: DomainError 4xx logs at warn level
@@ -340,6 +359,123 @@ describe('errorHandler — response body never leaks internal fields', () => {
     expect(Object.keys(body)).toEqual(['code', 'message']);
     expect(body.originalError).toBeUndefined();
     expect(body.stack).toBeUndefined();
+
+    await fastify.close();
+  });
+});
+
+// T017 — R001, R003: reportable errors are sent to the error tracker with the requestId
+describe('errorHandler — reports reportable errors to the error tracker (R001, R003)', () => {
+  it('WHEN a non-DomainError reaches the error handler THEN errorReporter.report is called with that error and the current requestId', async () => {
+    mockRequestContext.getStore.mockReturnValue({ requestId: 'req-abc' });
+    const fastify = await buildApp();
+    const rawError = new Error('unexpected failure');
+
+    fastify.get('/test', () => {
+      throw rawError;
+    });
+
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(mockErrorReporter.report).toHaveBeenCalledTimes(1);
+    expect(mockErrorReporter.report).toHaveBeenCalledWith(rawError, { requestId: 'req-abc' });
+
+    await fastify.close();
+  });
+
+  it('WHEN a DomainError with statusCode >= 500 reaches the error handler THEN errorReporter.report is called with that error and the current requestId', async () => {
+    mockRequestContext.getStore.mockReturnValue({ requestId: 'req-def' });
+    const fastify = await buildApp();
+    const domainErr = new DomainError('DB_ERROR', 'Database failure', 500);
+
+    fastify.get('/test', () => {
+      throw domainErr;
+    });
+
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(mockErrorReporter.report).toHaveBeenCalledTimes(1);
+    expect(mockErrorReporter.report).toHaveBeenCalledWith(domainErr, { requestId: 'req-def' });
+
+    await fastify.close();
+  });
+});
+
+// T018 — EC003: expected 4xx DomainErrors are never reported
+describe('errorHandler — skips reporting for expected 4xx errors (EC003)', () => {
+  it.each([
+    ['ValidationError', () => new ValidationError('Invalid email')],
+    ['NotFoundError', () => new NotFoundError('Resource')],
+  ])('WHEN a %s reaches the error handler THEN errorReporter.report is never called', async (_name, makeError) => {
+    const fastify = await buildApp();
+    const domainErr = makeError();
+
+    fastify.get('/test', () => {
+      throw domainErr;
+    });
+
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(mockErrorReporter.report).not.toHaveBeenCalled();
+
+    await fastify.close();
+  });
+});
+
+// T019 — EC005: no requestId available outside the request context
+describe('errorHandler — omits requestId outside request context (EC005)', () => {
+  it('WHEN requestContext.getStore() returns null THEN errorReporter.report is still called with requestId left undefined', async () => {
+    mockRequestContext.getStore.mockReturnValue(null);
+    const fastify = await buildApp();
+
+    fastify.get('/test', () => {
+      throw new Error('boom');
+    });
+
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(mockErrorReporter.report).toHaveBeenCalledTimes(1);
+    const [, context] = mockErrorReporter.report.mock.calls[0] as [unknown, { requestId?: string }];
+    expect(context.requestId).toBeUndefined();
+
+    await fastify.close();
+  });
+
+  it('WHEN requestContext.getStore() returns undefined THEN errorReporter.report is still called with requestId left undefined', async () => {
+    mockRequestContext.getStore.mockReturnValue(undefined);
+    const fastify = await buildApp();
+
+    fastify.get('/test', () => {
+      throw new Error('boom');
+    });
+
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    expect(mockErrorReporter.report).toHaveBeenCalledTimes(1);
+    const [, context] = mockErrorReporter.report.mock.calls[0] as [unknown, { requestId?: string }];
+    expect(context.requestId).toBeUndefined();
+
+    await fastify.close();
+  });
+});
+
+// T020 — NF001, NF002: the reply is independent of the reporter
+describe('errorHandler — reply is independent of the reporter (NF001, NF002)', () => {
+  it('WHEN errorReporter.report throws synchronously THEN the HTTP response is still sent with the correct status/body', async () => {
+    mockErrorReporter.report.mockImplementation(() => {
+      throw new Error('provider unreachable');
+    });
+    const fastify = await buildApp();
+
+    fastify.get('/test', () => {
+      throw new Error('boom');
+    });
+
+    const response = await fastify.inject({ method: 'GET', url: '/test' });
+    const body = JSON.parse(response.body) as Record<string, unknown>;
+
+    expect(response.statusCode).toBe(500);
+    expect(body).toEqual({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
 
     await fastify.close();
   });

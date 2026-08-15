@@ -148,7 +148,7 @@ Feature modules follow a **handler → useCase → IRepository → DBRepository*
 - **One use case per feature.** Use cases contain pure business logic with no framework or concrete service dependencies. They only consume repositories — **a use case never consumes another use case** under any circumstance.
 - **One repository per entity per data source.** `usersRepository.ts`, `usersCacheRepository.ts`, `usersEventsRepository.ts` are separate repositories because they target different data sources for the same entity. Mixing two entities in one repository (e.g. transactions + refunds) is a SRP violation — split them.
 - **Shared repositories live in `src/shared/repositories/`** when two or more modules depend on the same repository.
-- **Shared providers live in `src/shared/providers/`** when two or more modules depend on the same provider adapter — e.g. `ClerkMetadataProvider`, consumed by both `clerkAuthPlugin` and `modules/webhooks/clerk/`. Module-scoped provider adapters (a single consumer) stay under `modules/<feature>/providers/`, as with `modules/billing/providers/mobbexProvider.ts`.
+- **Shared providers live in `src/shared/providers/`** when two or more modules depend on the same provider adapter — e.g. `ClerkMetadataProvider`, consumed by both `clerkAuthPlugin` and `modules/webhooks/clerk/`; or the `errorReporter` singleton (`IErrorReporter`/`SentryErrorReporter`/`NoopErrorReporter`), consumed by both `shared/plugins/errorHandler.ts` and `modules/notifications/providers/resendEmailNotifier.ts`. Module-scoped provider adapters (a single consumer) stay under `modules/<feature>/providers/`, as with `modules/billing/providers/mobbexProvider.ts`.
 - **Use cases depend on interfaces, never on implementations.** Handlers do the wiring (`new FooDBRepository(db)`) and pass the instance to the use case constructor typed as `IFooRepository`.
 
 ### Repository interface pattern
@@ -172,6 +172,7 @@ Unit tests live under `apps/services/tests/unit/` using Jest. Interface mocks li
 | `serverConfig.ts` | `NODE_ENV`, `LOG_LEVEL`, `HOST`, `PORT`, `CORS_ORIGIN` |
 | `authConfig.ts` | `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET` |
 | `mobbexConfig.ts` | `BILLING_PROVIDER`, `MOBBEX_API_KEY`, `MOBBEX_ACCESS_TOKEN`, `MOBBEX_TEST_MODE`, `MOBBEX_TIMEOUT_MS`, `MOBBEX_WEBHOOK_SECRET` |
+| `errorTrackingConfig.ts` | `ERROR_TRACKING_DSN`, `ERROR_TRACKING_SAMPLE_RATE`, `SERVICE_VERSION` |
 | `subscriptionsConfig.ts` | `STRICT_ENTITLEMENTS_ON_PAST_DUE` |
 | `dbConfig.ts` | (database connection — see Database client section) |
 
