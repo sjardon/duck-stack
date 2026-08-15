@@ -582,7 +582,7 @@ Eliminar del repositorio toda la infraestructura y la automatización de AWS, y 
 
 ## INFRA-011 — Monitoreo de disponibilidad y agregación de logs
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

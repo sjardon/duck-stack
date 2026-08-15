@@ -46,6 +46,17 @@ services:
       success_threshold: 1
       failure_threshold: 3
 
+    # Forwards every line the container writes to stdout/stderr — the
+    # backend's structured JSON logs and the platform's own build/deploy
+    # lines alike — to Better Stack Logs via DigitalOcean's native `logtail`
+    # destination type, so the already-emitted fields (timestamp, level,
+    # message, requestId, userId, duration) become searchable and retained
+    # outside the platform (R005, R006, R008). See .do/monitoring/README.md.
+    log_destinations:
+      - name: betterstack
+        logtail:
+          token: ${BETTERSTACK_LOGS_TOKEN}
+
     envs:
       # --- serverConfig ---
       - key: NODE_ENV

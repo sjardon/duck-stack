@@ -105,3 +105,31 @@ Automatic deployment on merge (INFRA-012), custom domains and certificates, and 
 ### Files
 
 `.cloudflare/deploy.sh`, `.cloudflare/.env.deploy.web.example`, `.cloudflare/.env.deploy.landing.example`, `.cloudflare/README.md` (includes the "Current deployments" URL table), and acceptance test suites under `.cloudflare/tests/` (`deploy-script.test.sh`, `env-example.test.sh`, `gitignore.test.sh`, `readme.test.sh`). `.gitignore` excludes `.cloudflare/.env.deploy.*` while keeping both `*.example` files tracked. `package.json` (root) declares `wrangler` as a pinned devDependency.
+
+## Availability Monitoring & Log Aggregation — Better Stack (INFRA-011)
+
+The backend's public `GET /health` endpoint is probed externally by a Better Stack Uptime monitor, and every stdout line the backend writes on DigitalOcean App Platform is forwarded to Better Stack Logs — both configured through the existing `.do/app.yaml` + git-ignored values-file mechanism, with no change to any application source code.
+
+### Log forwarding
+
+`.do/app.yaml`'s `services[0]` component declares a `log_destinations` entry using DigitalOcean's native `logtail` destination type, pointed at Better Stack's Logtail ingestion endpoint via `${BETTERSTACK_LOGS_TOKEN}`. The platform ships every stdout/stderr line — the backend's structured JSON and the platform's own build/deploy/lifecycle lines — to this destination outside the request path, so a destination outage never degrades `GET /health` or request handling. Better Stack's Logs source auto-parses the backend's JSON lines and indexes `timestamp`, `level`, `message`, `requestId`, `userId`, `duration` as individually filterable fields, distinct from the platform's plain-text lines. No secret or PII reaches the destination because the forwarded content is governed by the pre-existing Pino logging convention (`duck-spec/docs/BACKEND.md`); a one-time manual inspection of the forwarded stream per environment is a mandatory setup step, not a code guarantee.
+
+### Availability monitoring
+
+`.do/monitoring/monitor.json` is a versioned Better Stack Uptime `status` monitor template (target URL, check frequency, and request timeout as `${VAR}` placeholders). `.do/monitoring/deploy.sh` renders it with `envsubst` and idempotently reconciles it against the Better Stack Uptime REST API (find-by-URL, then `PATCH` or `POST`), mirroring the upsert idiom `.do/deploy.sh` already uses for the app spec. The same script invites the environment's alert recipient (`BETTERSTACK_ALERT_EMAIL`) as a team member of that environment's Better Stack team, scoped by `BETTERSTACK_API_TOKEN` — one team per environment, so the recipient is naturally per-environment with no on-call/escalation resource created. Better Stack's native down/recovery incident emails carry the checked URL, the failure reason, and the outage duration; no notification text is composed by this design.
+
+### Per-environment configuration
+
+Every environment-dependent or credential value (`BETTERSTACK_LOGS_TOKEN`, `BETTERSTACK_API_TOKEN`, `BETTERSTACK_ALERT_EMAIL`, `BETTERSTACK_MONITOR_URL`, `BETTERSTACK_CHECK_FREQUENCY_SECONDS`, `BETTERSTACK_CHECK_TIMEOUT_SECONDS`) is a placeholder resolved from the same `.do/.env.deploy.<environment>` file `.do/app.yaml` already uses — one template serves every environment, no fork, no secret committed.
+
+### Known limits, recorded in `.do/monitoring/README.md`
+
+`GET /health` does not check the database, so a DB-only outage is not detected (accepted blind spot). An outage shorter than the probe interval can go undetected. The chosen interval, its monthly request count, and the log query that excludes `/health` lines are recorded per environment, together with the Logs destination's ingestion quota and its no-code-change mitigation (raising `LOG_LEVEL` and redeploying). An environment is not considered monitored until an end-to-end delivery test (forced downtime/recovery notification) has been performed and confirmed.
+
+### What is out of scope here
+
+Backend exception reporting and grouping (SERVICES-011), a public status page, on-call schedules/escalation/alert silencing, alarms over business metrics or email delivery metrics, custom dashboards, and distributed tracing. No source file of `apps/services`, `apps/web`, or `apps/landing` was changed.
+
+### Files
+
+`.do/app.yaml` (extended with `log_destinations`), `.do/.env.deploy.example` (extended with the monitoring/log-forwarding section), `.do/monitoring/monitor.json`, `.do/monitoring/deploy.sh`, `.do/monitoring/README.md`, and acceptance test suites under `.do/monitoring/tests/` (`monitor-spec.test.sh`, `deploy-script.test.sh`, `readme.test.sh`). `.do/tests/app-spec.test.sh` and `.do/tests/env-example.test.sh` were extended to cover the new values. `.do/README.md` cross-references `.do/monitoring/README.md`.

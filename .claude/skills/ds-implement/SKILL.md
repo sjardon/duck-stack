@@ -47,6 +47,22 @@ Filter tasks.md down to only the tasks whose `type` matches `phase`:
 
 Preserve tasks.md's existing relative order within the filtered set. Tasks of other types are out of scope for this invocation — do not read ahead into them or act on them, even if doing so seems more efficient.
 
+### 1b. Read applicable conventions
+
+Identify which app this phase's filtered tasks touch (inferable from `module` and design.md's `Files` list):
+
+| App likely affected | Conventions doc |
+|---|---|
+| `apps/services/` (backend modules) | `duck-spec/docs/BACKEND.md` |
+| `apps/web/`, `apps/landing/` (frontend modules) | `duck-spec/docs/FRONTEND.md` |
+
+These are vetted paths — never `Read` them in full. Use the ds-context protocol (preloaded skill):
+
+1. Run `bash .claude/skills/ds-context/scripts/toc.sh <doc>` to see the available sections.
+2. For every section that applies to the tasks in this phase, run `bash .claude/skills/ds-context/scripts/section.sh <doc> "<heading>"` and read it fully.
+
+Skip a section if `toc.sh` shows it is clearly out of scope for this phase's tasks (e.g. skip "Webhook modules" when no task touches `modules/webhooks/`). Only run this step on first-run invocations — retries follow the minimal-load rule in the "Retry run" section instead, and must not re-run this step.
+
 ### 2. Reading existing code (discipline)
 
 Use the `Files` section of design.md as your map. For each file you must MODIFY, follow this order:
@@ -151,3 +167,4 @@ Do not make changes beyond what is needed to resolve the reported findings.
 - Never violate technical constraints or implement out-of-scope items from analysis.md.
 - Always return the full context object, not just the result field.
 - On any unrecoverable error, set `status: "failure"` and populate `error` with the full detail.
+- Nunca citar R-ID/NF-ID en comentarios de código de producción.

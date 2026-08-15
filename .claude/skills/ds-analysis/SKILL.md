@@ -100,9 +100,9 @@ Determine effort based on the total analysis content:
 
 | Level | Criteria |
 |---|---|
-| `low` | ≤3 functional requirements, no NFRs, no edge cases, no dependencies |
-| `medium` | 4–7 requirements, or NFRs present, or edge cases present, or simple dependencies |
-| `high` | >7 requirements, or critical security/performance NFRs, or multiple dependencies |
+| `low` | ≤5 functional requirements, no NFRs, no edge cases, no dependencies |
+| `medium` | 6–12 requirements, or NFRs present, or edge cases present, or simple dependencies |
+| `high` | >12 requirements, or critical security/performance NFRs, or multiple dependencies |
 
 ## Return value
 
