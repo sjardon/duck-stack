@@ -22,13 +22,33 @@ jest.mock(
   { virtual: true },
 );
 
+// Mock requestContext to control the current requestId deterministically (R002).
+jest.mock('../../../../../src/shared/infrastructure/requestContext.js', () => ({
+  requestContext: {
+    getStore: jest.fn().mockReturnValue({ requestId: 'req-456' }),
+    run: jest.fn((_store: unknown, cb: () => void) => cb()),
+  },
+}));
+
+// Mock errorReporter to assert reporting calls without hitting a real provider (R002, EC001).
+jest.mock('../../../../../src/shared/providers/errorReporter.js', () => ({
+  errorReporter: {
+    report: jest.fn(),
+  },
+}));
+
 import { ResendEmailNotifier } from '../../../../../src/modules/notifications/providers/resendEmailNotifier.js';
 import { renderEmailTemplate } from '../../../../../src/modules/notifications/templates/renderEmailTemplate.js';
 import { logger } from '../../../../../src/shared/infrastructure/logger.js';
+import { requestContext } from '../../../../../src/shared/infrastructure/requestContext.js';
+import { errorReporter } from '../../../../../src/shared/providers/errorReporter.js';
+import { ProviderError } from '../../../../../src/shared/errors.js';
 import type { EmailNotifier, SendEmailInput } from '@repo/types';
 
 const mockRenderEmailTemplate = renderEmailTemplate as jest.Mock;
 const mockLogger = logger as unknown as { info: jest.Mock; warn: jest.Mock; error: jest.Mock };
+const mockRequestContext = requestContext as unknown as { getStore: jest.Mock; run: jest.Mock };
+const mockErrorReporter = errorReporter as unknown as { report: jest.Mock };
 
 const SENDER_EMAIL = 'noreply@example.com';
 const API_KEY = 're_test_key';
@@ -250,5 +270,39 @@ describe('ResendEmailNotifier — satisfies the unchanged EmailNotifier port (R0
     await flushPromises();
 
     expect(mockResendSend).toHaveBeenCalledTimes(1);
+  });
+});
+
+// T022 — R002, EC001
+describe('ResendEmailNotifier — reports caught dispatch failures to the error tracker (R002, EC001)', () => {
+  it('WHEN dispatch() rejects THEN send() catch calls errorReporter.report with that error and the current requestId, and the rejection never propagates out of send()', async () => {
+    mockRenderEmailTemplate.mockResolvedValue({
+      subject: 'Welcome',
+      html: '<p>Hi Ada</p>',
+      text: 'Hi Ada',
+    });
+    const resendNetworkError = new Error('Invalid API key');
+    mockResendSend.mockRejectedValue(resendNetworkError);
+    mockRequestContext.getStore.mockReturnValue({ requestId: 'req-456' });
+
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    const notifier = makeNotifier();
+
+    expect(() => notifier.send(welcomeInput)).not.toThrow();
+
+    await flushPromises();
+    process.off('unhandledRejection', onUnhandledRejection);
+
+    expect(mockErrorReporter.report).toHaveBeenCalledTimes(1);
+    const [reportedError, reportedContext] = mockErrorReporter.report.mock.calls[0] as [unknown, { requestId?: string }];
+    expect(reportedError).toBeInstanceOf(ProviderError);
+    expect((reportedError as ProviderError).originalError).toBe(resendNetworkError);
+    expect(reportedContext).toEqual({ requestId: 'req-456' });
+    expect(unhandledRejections).toHaveLength(0);
   });
 });

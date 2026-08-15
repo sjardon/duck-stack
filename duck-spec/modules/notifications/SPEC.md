@@ -23,7 +23,7 @@ Templates live under `apps/services/src/modules/notifications/templates/` and ar
 
 `ResendEmailNotifier` (`apps/services/src/modules/notifications/providers/resendEmailNotifier.ts`) is the only implementation of `EmailNotifier`, delivering through Resend's Node SDK. It is resolved as a singleton by `resolveNotifier()`, which builds the instance from `emailConfig` (Resend API key, sender address) and fails fast at first call if either the API key or the sender address is not configured.
 
-`send()` is the mandatory fire-and-forget wrapper: it invokes a private `dispatch()` without awaiting it and attaches a `.catch()` that logs and stops, so no rejection ever reaches the caller. `dispatch()`:
+`send()` is the mandatory fire-and-forget wrapper: it invokes a private `dispatch()` without awaiting it and attaches a `.catch()` that reports the caught failure to the shared `errorReporter` (`shared/providers/errorReporter.ts`, SERVICES-011) — tagged with the request id when one is available in the `AsyncLocalStorage` context — and stops, so no rejection ever reaches the caller. `dispatch()`:
 
 1. Validates the recipient address; a missing or malformed address is logged and dispatch stops (silent-fail, no delivery attempt).
 2. Calls `renderEmailTemplate()`; an unregistered template id is logged (with the template id) and dispatch stops without throwing.

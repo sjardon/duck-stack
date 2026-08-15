@@ -136,6 +136,20 @@ services:
         type: secret
         value: ${MOBBEX_WEBHOOK_SECRET}
 
+      # --- errorTrackingConfig ---
+      - key: ERROR_TRACKING_DSN
+        scope: RUN_TIME
+        type: secret
+        value: ${ERROR_TRACKING_DSN}
+      - key: ERROR_TRACKING_SAMPLE_RATE
+        scope: RUN_TIME
+        type: general
+        value: ${ERROR_TRACKING_SAMPLE_RATE}
+      - key: SERVICE_VERSION
+        scope: RUN_TIME
+        type: general
+        value: ${SERVICE_VERSION}
+
       # --- subscriptionsConfig ---
       - key: SIGNUP_MODE
         scope: RUN_TIME

@@ -3,6 +3,8 @@ import type { EmailNotifier, EmailTemplateId, SendEmailInput } from '@repo/types
 import { renderEmailTemplate } from '../templates/renderEmailTemplate.js';
 import { logger } from '../../../shared/infrastructure/logger.js';
 import { ProviderError } from '../../../shared/errors.js';
+import { requestContext } from '../../../shared/infrastructure/requestContext.js';
+import { errorReporter } from '../../../shared/providers/errorReporter.js';
 
 // A conservative "looks like an email" check — not full RFC 5322 validation (EC002).
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,9 +28,11 @@ export class ResendEmailNotifier implements EmailNotifier {
   // swallowed — dispatch() has already logged internally, so no rejection or
   // logging duplication can reach the caller (R001, NF001, NF002).
   send<T extends EmailTemplateId>(input: SendEmailInput<T>): void {
-    void this.dispatch(input).catch(() => {
-      // Intentionally silent: dispatch() logs before rethrowing. This catch only
-      // exists to prevent an unhandled promise rejection.
+    void this.dispatch(input).catch((err: unknown) => {
+      // dispatch() has already logged internally; this catch's only remaining
+      // job is to close the blind spot on a caught-and-stopped failure by
+      // reporting it explicitly before swallowing the rejection.
+      errorReporter.report(err, { requestId: requestContext.getStore()?.requestId });
     });
   }
 

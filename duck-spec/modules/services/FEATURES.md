@@ -527,7 +527,7 @@ Que el servicio valide toda su configuración de entorno al arrancar y falle de 
 
 ## SERVICES-011 — Error tracking del backend
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
