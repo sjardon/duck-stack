@@ -58,7 +58,7 @@ Establecer la estructura base de la app `web` con arquitectura en capas (api, ho
 
 ## WEB-002 — Error tracking en `web`
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

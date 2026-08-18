@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider } from "@clerk/clerk-react";
 import App from "./App";
+import { initErrorTracking } from "./lib/errorTracking";
+import { AppErrorBoundary } from "./components/error/AppErrorBoundary";
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -13,13 +15,17 @@ if (!publishableKey) {
   );
 }
 
+initErrorTracking();
+
 const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ClerkProvider publishableKey={publishableKey}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
       </QueryClientProvider>
     </ClerkProvider>
   </StrictMode>

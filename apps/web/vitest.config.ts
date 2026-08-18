@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    environmentMatchGlobs: [['tests/error-tracking/viteConfig.test.ts', 'node']],
     globals: true,
     setupFiles: ['./tests/setup.ts'],
   },

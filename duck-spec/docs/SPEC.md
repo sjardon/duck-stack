@@ -16,7 +16,7 @@ See `duck-spec/modules/infra/SPEC.md` for full details.
 
 ## web
 
-**Status:** Base structure in place.
+**Status:** Base structure in place. Uncaught errors, unhandled promise rejections, and render failures are reported to Better Stack via the Sentry SDK for React, gated on `VITE_ERROR_TRACKING_DSN`, PII-scrubbed to a user id only, tagged with environment/release, with a dependency-free error boundary fallback and build-time source-map upload/cleanup gated on `SENTRY_AUTH_TOKEN` (WEB-002).
 
 `apps/web` is a Vite + React + TypeScript SPA organised into strict layer directories (`api/`, `hooks/`, `pages/`, `components/ui/`, `components/domain/`, `store/`, `lib/`). The entry point wires React Query via `QueryClientProvider` and two Zustand stores (`useSessionStore`, `useUiStore`) are available for session and UI state. A shared HTTP client (`api/client.ts`) wraps `fetch` with an optional auth-header placeholder. A working health-check vertical slice (`api/health.ts` → `hooks/useHealth.ts` → `pages/health/HealthPage.tsx`) serves as the canonical layering reference.
 
