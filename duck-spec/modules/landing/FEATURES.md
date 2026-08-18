@@ -56,7 +56,7 @@ Establecer la estructura base de la app `landing` con una arquitectura simple or
 
 ## LANDING-002 — Error tracking en `landing`
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

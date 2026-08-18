@@ -70,14 +70,14 @@ stood up.
    `https://*.pages.dev` URL. Record it in the "Current deployments" table
    below.
 
-## Error tracking variables (WEB-002, `web` only)
+## Error tracking variables (WEB-002 `web`, LANDING-002 `landing`)
 
-`web`'s error tracking (Better Stack, via the Sentry SDK) is opt-in and controlled by two independent groups of variables:
+Both `web`'s and `landing`'s error tracking (Better Stack, via the Sentry SDK) are opt-in and controlled by two independent groups of variables:
 
 - **Public, `VITE_*`-prefixed, belong in the values file:** `VITE_ERROR_TRACKING_DSN`, `VITE_RELEASE`, `VITE_ENVIRONMENT`. These are inlined into the published bundle. Leaving `VITE_ERROR_TRACKING_DSN` unset disables error tracking entirely — the application still renders and operates normally.
 - **Deploy-time only, never `VITE_*`-prefixed, never inlined into the bundle:** `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`. These authenticate and target the source-map upload performed during `vite build`. `SENTRY_AUTH_TOKEN` gates whether source maps are produced at all — when it is unset, the build emits no `.map` files.
 
-When `SENTRY_AUTH_TOKEN` is set, `vite build` uploads `dist/**/*.map` to the error tracking provider under the same `VITE_RELEASE` identifier the running application reports, then deletes the `.map` files from `dist` before this script's `wrangler pages deploy` step runs — source maps are never published alongside the bundle. If the upload fails, the plugin fails `vite build`, which aborts the deploy before anything is published.
+When `SENTRY_AUTH_TOKEN` is set, `vite build` uploads `dist/**/*.map` to the error tracking provider under the same `VITE_RELEASE` identifier the running application reports, then deletes the `.map` files from `dist` before this script's `wrangler pages deploy` step runs — source maps are never published alongside the bundle. If the upload fails, the plugin fails `vite build`, which aborts the deploy before anything is published. `landing` follows the identical mechanism as `web`, reusing the same `sentryVitePlugin` wiring and `VITE_RELEASE` single source of truth between build-time and runtime.
 
 ## Configuring the backend's `CORS_ORIGIN`
 
