@@ -151,6 +151,16 @@ Section components in `components/sections/` must remain independent of each oth
 
 `apps/landing` deliberately omits React Query, Zustand, and `@repo/types`. These are intentional exclusions that match the lightweight nature of a marketing SPA and must not be introduced without a new feature explicitly scoping that addition.
 
+## `apps/landing` — Error tracking conventions
+
+`apps/landing` reuses the `apps/web` error tracking mechanism (see "`apps/web` — Error tracking conventions" above) as-is, with one deliberate difference: the landing is anonymous, so no user attribution hook exists.
+
+`lib/errorTracking.ts` exports `initErrorTracking()`, called synchronously in `main.tsx` before `createRoot(...).render(...)`. It reads config (`VITE_ERROR_TRACKING_DSN`, `VITE_ENVIRONMENT`, `VITE_RELEASE`) from `import.meta.env`; when the DSN is absent it is a no-op. `Sentry.init` is wrapped in `try/catch` so an initialization failure never blocks rendering. `beforeSend` (`scrubEvent`) strips `event.user` defensively — no code path ever sets it, since the landing has no auth provider and never calls `Sentry.setUser` — and `sendDefaultPii: false` is set as defense in depth. No session-replay or user-feedback integration is registered, so the contact form's field contents are never captured.
+
+`components/error/AppErrorBoundary.tsx` is a thin project-owned wrapper around `Sentry.ErrorBoundary`, wrapping `<App/>` in `main.tsx`. Its `fallback` (`components/error/ErrorFallback.tsx`) renders only static markup plus a reload action — no hooks, no `@repo/types`, no provider-dependent state.
+
+Source maps follow the identical `apps/web` design: `apps/landing/vite.config.ts` gates `build.sourcemap` and the `@sentry/vite-plugin` on `Boolean(process.env.SENTRY_AUTH_TOKEN)`, uploads maps under the same `VITE_RELEASE` the runtime reports, and deletes them from `dist` after upload. No custom `errorHandler` override is passed to the plugin, so its default rethrow on upload failure fails `vite build` and aborts the deploy.
+
 ## Entitlement gating
 
 `apps/web` provides two primitives for feature gating based on the authenticated scope's subscription entitlements.

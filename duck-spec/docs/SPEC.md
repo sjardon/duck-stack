@@ -26,7 +26,7 @@ See `duck-spec/modules/web/SPEC.md` for full details.
 
 ## landing
 
-**Status:** Base structure in place.
+**Status:** Base structure in place. Uncaught errors, unhandled promise rejections, and render failures are reported to Better Stack via the Sentry SDK for React, gated on `VITE_ERROR_TRACKING_DSN`, tagged with environment/release, strictly anonymous (no user attribution), with a dependency-free error boundary fallback and build-time source-map upload/cleanup gated on `SENTRY_AUTH_TOKEN`, reusing the WEB-002 mechanism as-is (LANDING-002).
 
 `apps/landing` is a Vite + React + TypeScript marketing SPA. Its source is organised into `components/layout/`, `components/sections/`, `components/ui/`, `pages/`, `api/`, and `lib/`. Layout components (`Navbar`, `Footer`) and three independent marketing sections (`Hero`, `Features`, `CTA`) are composed into a single `HomePage` rendered at `/`. UI primitives (`Button`, `Badge`) have no dependencies beyond React. A stub `api/contact.ts` resolves without a network call. React Router handles routing with a catch-all redirect to `/` for unknown paths.
 
