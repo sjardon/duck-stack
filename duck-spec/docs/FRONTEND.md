@@ -17,6 +17,7 @@ Living document describing frontend conventions, components, and design system d
 | Server-state | React Query (`@tanstack/react-query`) — configured in `main.tsx` via `QueryClientProvider` |
 | Client-state | Zustand — two stores (`useSessionStore`, `useUiStore`) in `apps/web/src/store/` |
 | Auth | Clerk via `@clerk/clerk-react` — `ClerkProvider` wraps the React tree in `main.tsx` |
+| Error tracking | `@sentry/react` (Better Stack, Sentry-SDK-compatible) — initialized in `main.tsx` before first render, opt-in via `VITE_ERROR_TRACKING_DSN` |
 
 ## Applications
 
@@ -109,6 +110,16 @@ The page is wrapped by `AuthGuard`. It renders a welcome message and a form with
 ### AppLayout
 
 `components/layout/AppLayout.tsx` is the authenticated layout shell. It renders `<UserButton />` from `@clerk/clerk-react` in the header, providing in-place sign-out and account management for every authenticated page. `<TrialBanner />` is mounted above the header element; it uses fixed positioning and renders conditionally, so it does not reflow the page body.
+
+## `apps/web` — Error tracking conventions
+
+`lib/errorTracking.ts` exports `initErrorTracking()`, called synchronously in `main.tsx` before `createRoot(...).render(...)`. It reads config (`VITE_ERROR_TRACKING_DSN`, `VITE_ENVIRONMENT`, `VITE_RELEASE`) from `import.meta.env`; when the DSN is absent it is a no-op — the vendor SDK's exported functions (`init`, `setUser`, `captureException`, `ErrorBoundary`) are all documented no-ops when never initialized, so the rest of the app requires no conditional wiring. `Sentry.init` is wrapped in `try/catch` so an initialization failure never blocks rendering. `beforeSend` drops events whose stack frames all originate from a browser-extension URL scheme and trims `event.user` to `{ id }` only; `sendDefaultPii: false` is set as defense in depth.
+
+`components/error/AppErrorBoundary.tsx` is a thin project-owned wrapper around `Sentry.ErrorBoundary`, wrapping `<App/>` in `main.tsx`, so call sites depend on a project symbol rather than the vendor package directly. Its `fallback` (`components/error/ErrorFallback.tsx`) renders only static markup plus a reload action — no hooks, no `@repo/types`, no provider-dependent state — so the fallback itself has no independent failure path.
+
+User attribution is synced from a dedicated hook (`hooks/use-sync-error-tracking-user.ts`, `useSyncErrorTrackingUser()`) invoked once from the root `App.tsx` component, above the router, rather than from a page — this is a documented cross-cutting exception to "only page components invoke data-fetching hooks" (same category as `<TrialBanner/>` and `AppLayout`'s direct `<UserButton/>` usage) because attribution must hold for every route and the hook performs no React Query call.
+
+Source maps are gated end-to-end on the presence of a build/deploy-only `SENTRY_AUTH_TOKEN` (never `VITE_`-prefixed, so it is structurally unreachable from the client bundle): `apps/web/vite.config.ts` only enables `build.sourcemap` and the `@sentry/vite-plugin` when the token is present, uploads maps under the same `VITE_RELEASE` the runtime reports, and deletes them from `dist` after upload so they never ship next to the published bundle. The plugin is configured with an explicit `errorHandler` that rethrows on upload failure — overriding the plugin's default of swallowing the failure — so a broken upload fails the build instead of silently shipping a release with unresolvable stack traces.
 
 ## Store structure
 
