@@ -23,6 +23,12 @@ vi.mock('../src/hooks/use-user-profile', () => ({
   })),
 }));
 
+// Mock analytics captureEvent
+const mockCaptureEvent = vi.fn();
+vi.mock('../src/lib/analytics', () => ({
+  captureEvent: (...args: unknown[]) => mockCaptureEvent(...args),
+}));
+
 import OnboardingPage from '../src/pages/onboarding/OnboardingPage';
 import { useCompleteOnboarding } from '../src/hooks/use-user-profile';
 
@@ -39,6 +45,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockMutate.mockReset();
+  mockCaptureEvent.mockReset();
   mutationOnSuccess = undefined;
   mockUseCompleteOnboarding.mockReturnValue({ mutate: mockMutate, isPending: false });
 });
@@ -89,6 +96,27 @@ describe('OnboardingPage', () => {
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/');
+    });
+  });
+
+  it('(R002) records an onboarding_completed event on mutation success', async () => {
+    mockUseCompleteOnboarding.mockReturnValue({ mutate: mockMutate, isPending: false });
+
+    mockMutate.mockImplementation((_data: unknown, options: { onSuccess?: () => void }) => {
+      if (options?.onSuccess) {
+        options.onSuccess();
+      }
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/job role/i), { target: { value: 'Engineer' } });
+    fireEvent.change(screen.getByLabelText(/company size/i), { target: { value: '11-50' } });
+    fireEvent.change(screen.getByLabelText(/primary use case/i), { target: { value: 'Build tools' } });
+    fireEvent.click(screen.getByRole('button', { name: /submit|continue|get started/i }));
+
+    await waitFor(() => {
+      expect(mockCaptureEvent).toHaveBeenCalledWith('onboarding_completed');
     });
   });
 

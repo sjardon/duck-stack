@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCompleteOnboarding } from "../../hooks/use-user-profile";
+import { captureEvent } from "../../lib/analytics";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function OnboardingPage() {
       },
       {
         onSuccess: () => {
+          captureEvent("onboarding_completed");
           navigate("/");
         },
       },

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMySubscription, usePlans, useCancelSubscription } from '../../hooks/use-billing';
 import SubscriptionStatusCard from '../../components/domain/billing/SubscriptionStatusCard';
 import CancelDialog from '../../components/domain/billing/CancelDialog';
+import { captureEvent } from '../../lib/analytics';
 
 export default function BillingPage(): JSX.Element {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
@@ -49,7 +50,12 @@ export default function BillingPage(): JSX.Element {
     if (!subscription) return;
     cancelSubscription(
       { id: subscription.id, body: { atPeriodEnd: true } },
-      { onSuccess: () => setCancelDialogOpen(false) },
+      {
+        onSuccess: () => {
+          captureEvent('subscription_canceled', { atPeriodEnd: true });
+          setCancelDialogOpen(false);
+        },
+      },
     );
   };
 

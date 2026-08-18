@@ -18,6 +18,11 @@ vi.mock('../../src/hooks/use-billing', () => ({
   useCancelSubscription: vi.fn(),
 }));
 
+const mockCaptureEvent = vi.fn();
+vi.mock('../../src/lib/analytics', () => ({
+  captureEvent: (...args: unknown[]) => mockCaptureEvent(...args),
+}));
+
 import { useMySubscription, usePlans, useCancelSubscription } from '../../src/hooks/use-billing';
 import BillingPage from '../../src/pages/billing/BillingPage';
 
@@ -190,6 +195,21 @@ describe('BillingPage', () => {
       { id: 'sub-1', body: { atPeriodEnd: true } },
       expect.any(Object),
     );
+  });
+
+  it('(R002) records a subscription_canceled event when the cancel mutation succeeds', () => {
+    const mockCancel = vi.fn((_vars: unknown, options: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    mockUseCancelSubscription.mockReturnValue({ mutate: mockCancel, isPending: false });
+    mockUseMySubscription.mockReturnValue({ ...defaultSubQuery, data: mockSub });
+    mockUsePlans.mockReturnValue({ ...defaultPlansQuery, data: [mockPlan] });
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
+    expect(mockCaptureEvent).toHaveBeenCalledWith('subscription_canceled', { atPeriodEnd: true });
   });
 
   it('(EC001) renders past_due badge and payment-failed message', () => {
