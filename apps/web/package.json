@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.0.0",
+    "@posthog/react": "^1.10.0",
     "@sentry/react": "^10.0.0",
     "@tanstack/react-query": "^5.0.0",
+    "posthog-js": "^1.418.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.0.0",

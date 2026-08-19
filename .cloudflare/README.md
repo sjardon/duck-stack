@@ -79,6 +79,15 @@ Both `web`'s and `landing`'s error tracking (Better Stack, via the Sentry SDK) a
 
 When `SENTRY_AUTH_TOKEN` is set, `vite build` uploads `dist/**/*.map` to the error tracking provider under the same `VITE_RELEASE` identifier the running application reports, then deletes the `.map` files from `dist` before this script's `wrangler pages deploy` step runs — source maps are never published alongside the bundle. If the upload fails, the plugin fails `vite build`, which aborts the deploy before anything is published. `landing` follows the identical mechanism as `web`, reusing the same `sentryVitePlugin` wiring and `VITE_RELEASE` single source of truth between build-time and runtime.
 
+## Product analytics and feature flag variables (WEB-003 `web`)
+
+`web`'s product analytics (screen views, named product events, session replay) and runtime feature flags are both provided by PostHog and are opt-in, controlled by two public `VITE_*` variables that belong in the values file:
+
+- `VITE_POSTHOG_KEY` — the PostHog project API key. Leaving it unset disables analytics capture, session replay, and flag resolution entirely: the application still renders and operates normally, and every flag resolves to its safe (disabled) default.
+- `VITE_POSTHOG_HOST` — the ingestion host. Defaults to `https://us.i.posthog.com` when unset.
+
+No deploy-time-only variable is needed for this feature — unlike error tracking's source-map upload, PostHog has no build-time secret.
+
 ## Configuring the backend's `CORS_ORIGIN`
 
 Both SPAs call the backend deployed under INFRA-008, so the backend's

@@ -62,3 +62,27 @@ Two Zustand stores are wired:
 ### Source maps and release publication
 
 `vite.config.ts` gates source-map generation and upload on `Boolean(process.env.SENTRY_AUTH_TOKEN)` (`sourceMapsEnabled`). When the token is absent (e.g. a local `pnpm build` without deploy credentials), `build.sourcemap` is `false` and no `.map` files are ever produced. When present, `build.sourcemap` is `true`, `@sentry/vite-plugin` uploads `dist/**/*.map` under the same `VITE_RELEASE` identifier the runtime reports, deletes the maps from `dist` afterward (`sourcemaps.filesToDeleteAfterUpload`) so they never ship next to the published bundle, and is configured with an explicit `errorHandler` that rethrows on upload failure — this overrides the plugin's own default of swallowing upload failures, so a failed upload now fails `vite build`, which aborts `.cloudflare/deploy.sh` before `wrangler pages deploy` runs instead of silently shipping a release with unresolvable stack traces. `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_URL` are read only from `process.env` in the Node build context of `vite.config.ts` and are never `VITE_`-prefixed, so they are structurally unreachable from the client bundle.
+
+## Product analytics and feature flags (WEB-003)
+
+`apps/web` records screen views, named product actions, and session replay through PostHog (`posthog-js` / `@posthog/react`), and exposes runtime feature flags that can be toggled per user without a deploy. PostHog is the single provider for both capabilities.
+
+### Initialization and gating
+
+`lib/analytics.ts` exports `readAnalyticsConfig()` (reads `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` from `import.meta.env`; returns `null` when the key is absent) and `initAnalytics()`, called synchronously in `main.tsx` before `createRoot(...).render(...)`. When config is absent, `initAnalytics()` is a no-op — the application renders and operates normally with capture, replay, and flag resolution disabled, and never throws at startup. When present, `posthog.init()` is called wrapped in `try/catch` (an init failure is logged and swallowed rather than blocking render), with `capture_pageview: "history_change"` for automatic route-accurate screen views, `autocapture: false` and `capture_heatmaps: false` to exclude high-frequency and automatic DOM capture, and `person_profiles: "identified_only"`. `PostHogProvider` wraps the application tree in `main.tsx` unconditionally with the singleton `posthog` client, whether or not `posthog.init()` actually ran, so every consumer of the flag hook can be called unconditionally without a missing-context failure.
+
+### Event capture
+
+`captureEvent(name, properties)` in `lib/analytics.ts` wraps `posthog.capture()` as the single project-owned entry point for recording a designated product action; it is synchronous and never awaited on the interaction path, and pre-init it is a documented no-op. Only explicitly named calls at call sites chosen by the feature record events — no automatic click, scroll, pointer, or per-keystroke capture exists, and property content is under caller control (no email, name, phone, address, free-text field contents, or credentials).
+
+### Session replay masking
+
+`session_recording.maskAllInputs: true` masks all input/textarea entry in the replay. `maskTextSelector: "*"` plus a `maskTextFn` mask all other text content by default; only an element carrying `data-ph-allow="true"` is sent unmasked — masking is opt-out per element, not opt-in.
+
+### Feature flags
+
+`hooks/useFeatureFlag.ts` exports `useFeatureFlag(key)`, wrapping `@posthog/react`'s `useFeatureFlagEnabled` and mapping its state to `{ enabled, isResolved }`: not-configured resolves deterministically to `{ enabled: false, isResolved: true }`; unresolved (initial load, or a provider blocked/unreachable, e.g. by an ad blocker) resolves to `{ enabled: false, isResolved: false }` and stays that way indefinitely without throwing or blocking; resolved reflects the flag's live value. `components/flags/FeatureFlagGate.tsx` consumes the hook declaratively (`flag`, `children`, `fallback`, `loading` props) and renders the loading/fallback branch whenever `isResolved` is `false`, so the enabled branch is never rendered and then removed. Flags are evaluated by a runtime call rather than a bundled constant, so a change in the provider takes effect with no rebuild. Feature flags are a release-enablement mechanism only — they do not replace or duplicate `useEntitlement`, `useQuota`, or `useTrialStatus`.
+
+### User attribution
+
+`hooks/use-sync-analytics-user.ts` exports `useSyncAnalyticsUser()`, invoked once from `App.tsx` above the router (the same cross-cutting exception as `useSyncErrorTrackingUser`). It calls `posthog.identify(user.id)` — identifier only, never name or email — when a Clerk session is present, which also merges the session's prior anonymous events into the identified person and triggers a feature-flag re-evaluation so every `useFeatureFlag`/`FeatureFlagGate` consumer re-renders with the identified user's value automatically. It calls `posthog.reset()` on sign-out so a following anonymous session on the same device is not misattributed.

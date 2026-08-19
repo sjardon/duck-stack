@@ -122,7 +122,7 @@ Que los errores de la SPA del producto lleguen reportados, agrupados y con traza
 
 ## WEB-003 — Product analytics y feature flags en `web`
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

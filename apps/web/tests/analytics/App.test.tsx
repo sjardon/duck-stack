@@ -18,20 +18,20 @@ vi.mock('../../src/hooks/use-sync-analytics-user', () => ({
 }));
 
 import App from '../../src/App';
-import { useSyncErrorTrackingUser } from '../../src/hooks/use-sync-error-tracking-user';
+import { useSyncAnalyticsUser } from '../../src/hooks/use-sync-analytics-user';
 
-const mockUseSyncErrorTrackingUser = useSyncErrorTrackingUser as ReturnType<typeof vi.fn>;
+const mockUseSyncAnalyticsUser = useSyncAnalyticsUser as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// T025 — R006
+// T033 — R003
 
-describe('App — syncs error-tracking user (R006)', () => {
-  it('WHEN App renders THEN useSyncErrorTrackingUser is invoked', () => {
+describe('App — syncs analytics user (R003)', () => {
+  it('WHEN App renders THEN useSyncAnalyticsUser is invoked', () => {
     render(<App />);
 
-    expect(mockUseSyncErrorTrackingUser).toHaveBeenCalledTimes(1);
+    expect(mockUseSyncAnalyticsUser).toHaveBeenCalledTimes(1);
   });
 });
