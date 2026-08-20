@@ -5,7 +5,7 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import { PostHogProvider } from "@posthog/react";
 import App from "./App";
 import { initErrorTracking } from "./lib/errorTracking";
-import { initAnalytics, posthog } from "./lib/analytics";
+import { initAnalytics, adoptPropagatedIdentity, posthog } from "./lib/analytics";
 import { AppErrorBoundary } from "./components/error/AppErrorBoundary";
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -19,6 +19,7 @@ if (!publishableKey) {
 
 initErrorTracking();
 initAnalytics();
+adoptPropagatedIdentity();
 
 const queryClient = new QueryClient();
 

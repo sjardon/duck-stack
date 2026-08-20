@@ -1,7 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+vi.mock('posthog-js', () => ({
+  default: {
+    init: vi.fn(),
+    capture: vi.fn(),
+    get_distinct_id: vi.fn(() => null),
+  },
+}));
+
+import posthog from 'posthog-js';
 import { listPlans } from '../src/api/plans';
 import Pricing from '../src/components/sections/Pricing';
+
+const mockCapture = posthog.capture as ReturnType<typeof vi.fn>;
 
 const mockPlans = [
   {
@@ -15,6 +27,8 @@ const mockPlans = [
 ];
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
   vi.stubEnv('VITE_API_URL', 'http://api.test');
   vi.stubEnv('VITE_WEB_URL', 'http://web.test');
 });
@@ -112,6 +126,67 @@ describe('Pricing CTA navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /get started/i }));
 
+    expect(window.location.href).toBe('http://web.test/billing/subscribe?plan=pro');
+  });
+});
+
+// T017 — R003, NF001, NF002
+describe('Pricing CTA — conversion event recorded synchronously before navigation, no PII', () => {
+  it("(R003, NF001, NF002) clicking a plan CTA calls captureEvent('registration_started', ...) before window.location.href is set, with only action/plan in the payload", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: mockPlans }),
+    }));
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      configurable: true,
+      writable: true,
+    });
+    mockCapture.mockImplementation(() => {
+      expect(window.location.href).toBe('');
+    });
+
+    render(<Pricing />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /get started/i }));
+
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    const [name, properties] = mockCapture.mock.calls[0];
+    expect(name).toBe('registration_started');
+    expect(properties).toEqual({ action: 'pricing', plan: 'pro' });
+    expect(window.location.href).toBe('http://web.test/billing/subscribe?plan=pro');
+  });
+});
+
+// T019 — R008, EC004
+describe('Pricing CTA — repeat hand-off from the same browser does not record a second conversion', () => {
+  it('(R008, EC004) clicking the same plan CTA twice records registration_started only once, while navigation happens on both clicks', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: mockPlans }),
+    }));
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<Pricing />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument(),
+    );
+    const button = screen.getByRole('button', { name: /get started/i });
+
+    fireEvent.click(button);
+    expect(window.location.href).toBe('http://web.test/billing/subscribe?plan=pro');
+
+    window.location.href = '';
+    fireEvent.click(button);
+
+    expect(mockCapture).toHaveBeenCalledTimes(1);
     expect(window.location.href).toBe('http://web.test/billing/subscribe?plan=pro');
   });
 });

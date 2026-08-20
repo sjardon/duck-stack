@@ -86,3 +86,7 @@ Two Zustand stores are wired:
 ### User attribution
 
 `hooks/use-sync-analytics-user.ts` exports `useSyncAnalyticsUser()`, invoked once from `App.tsx` above the router (the same cross-cutting exception as `useSyncErrorTrackingUser`). It calls `posthog.identify(user.id)` — identifier only, never name or email — when a Clerk session is present, which also merges the session's prior anonymous events into the identified person and triggers a feature-flag re-evaluation so every `useFeatureFlag`/`FeatureFlagGate` consumer re-renders with the identified user's value automatically. It calls `posthog.reset()` on sign-out so a following anonymous session on the same device is not misattributed.
+
+### Landing hand-off identity adoption (LANDING-003)
+
+`lib/analytics.ts` also exports `adoptPropagatedIdentity()`, called in `main.tsx` right after `initAnalytics()` and before render — and before any `identify(user.id)` call from `useSyncAnalyticsUser()` can run. It reads a `landing_id` query parameter from the incoming URL (set by `apps/landing`'s hand-off navigation) and, when present, calls `posthog.identify(landingId)` wrapped in `try/catch` so an adoption failure never blocks render. This chains the merge anonymous-landing-id → anonymous-web-session → known-user, so events recorded by `apps/landing` before registration and events recorded by `apps/web` after registration resolve to the same PostHog person. When `landing_id` is absent, it is a no-op and the application continues with its own locally generated anonymous identity.

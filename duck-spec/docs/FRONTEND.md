@@ -169,6 +169,14 @@ Section components in `components/sections/` must remain independent of each oth
 
 Source maps follow the identical `apps/web` design: `apps/landing/vite.config.ts` gates `build.sourcemap` and the `@sentry/vite-plugin` on `Boolean(process.env.SENTRY_AUTH_TOKEN)`, uploads maps under the same `VITE_RELEASE` the runtime reports, and deletes them from `dist` after upload. No custom `errorHandler` override is passed to the plugin, so its default rethrow on upload failure fails `vite build` and aborts the deploy.
 
+## `apps/landing` — Analytics and conversion hand-off conventions
+
+`apps/landing` has its own `lib/analytics.ts`, mirroring the `apps/web` init-module shape (see "`apps/web` — Analytics and feature flag conventions" above) rather than importing it: `readAnalyticsConfig()`/`initAnalytics()` read `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` and no-op when the key is absent, called synchronously in `main.tsx` alongside `initErrorTracking()`. The landing's `posthog.init()` call disables what `apps/web` enables — `capture_pageview: false` (visits are captured explicitly), `disable_session_recording: true` — since replay and automatic pageviews are out of scope for the landing.
+
+Visit and traffic-origin recording live in a route-aware component, `components/analytics/RouteVisitTracker.tsx`, mounted inside `<BrowserRouter>` in `App.tsx`: on mount and on every route change it registers first-/last-touch UTM and referrer data as PostHog super properties (`lib/attribution.ts`), then captures a `landing_page_viewed` event so the origin is already attached. This is the landing's counterpart to `apps/web`'s `captureEvent` call-site convention — event calls belong to the component that owns the action, never to `components/ui/`.
+
+Actions that hand the visitor off to `apps/web` (`components/sections/CTA.tsx`, `components/sections/Pricing.tsx`) record a `registration_started` conversion event synchronously, guarded by a `localStorage`-backed idempotency check (`lib/conversion.ts`) so a repeat hand-off in the same browser is not double-counted, then navigate through `lib/handoff.ts`'s `buildHandoffUrl(path)`, which appends the visitor's PostHog distinct id as a `landing_id` query parameter and falls back to the destination unchanged when analytics is unconfigured. `components/ui/Button.tsx` remains untouched by this — it only ever receives an `onClick` handler, never a destination or an analytics call.
+
 ## Entitlement gating
 
 `apps/web` provides two primitives for feature gating based on the authenticated scope's subscription entitlements.

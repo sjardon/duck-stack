@@ -10,10 +10,16 @@ vi.mock('posthog-js', () => ({
 }));
 
 import posthog from 'posthog-js';
-import { readAnalyticsConfig, initAnalytics, captureEvent } from '../../src/lib/analytics';
+import {
+  readAnalyticsConfig,
+  initAnalytics,
+  captureEvent,
+  adoptPropagatedIdentity,
+} from '../../src/lib/analytics';
 
 const mockInit = posthog.init as ReturnType<typeof vi.fn>;
 const mockCapture = posthog.capture as ReturnType<typeof vi.fn>;
+const mockIdentify = posthog.identify as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -159,5 +165,30 @@ describe('initAnalytics — session replay masking configured, opt-out per eleme
     const element = { dataset: { phAllow: 'true' } } as unknown as HTMLElement;
 
     expect(options.session_recording.maskTextFn('secret', element)).toBe('secret');
+  });
+});
+
+// T025 — R006, NF003, EC001
+
+describe('adoptPropagatedIdentity — adopts a landing-propagated identity (R006, NF003, EC001)', () => {
+  it('WHEN window.location.search contains landing_id THEN posthog.identify is called with that id', () => {
+    Object.defineProperty(window, 'location', {
+      value: { search: '?landing_id=distinct-abc' },
+      configurable: true,
+    });
+
+    adoptPropagatedIdentity();
+
+    expect(mockIdentify).toHaveBeenCalledWith('distinct-abc');
+  });
+
+  it('WHEN the landing_id param is absent THEN adoptPropagatedIdentity returns without calling posthog.identify and without throwing', () => {
+    Object.defineProperty(window, 'location', {
+      value: { search: '' },
+      configurable: true,
+    });
+
+    expect(() => adoptPropagatedIdentity()).not.toThrow();
+    expect(mockIdentify).not.toHaveBeenCalled();
   });
 });

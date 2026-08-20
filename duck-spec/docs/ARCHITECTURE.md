@@ -46,6 +46,8 @@ Authenticated requests include an `Authorization: Bearer <token>` header. `api/c
 
 Since `apps/web` and `apps/landing` are each served from their own Cloudflare Pages public URL (INFRA-009), `apps/services`' `serverConfig.corsOrigin` accepts a comma-separated `CORS_ORIGIN` value and resolves it to a `string[]` so `@fastify/cors` matches either origin; a single value (including the `'*'` default) is unaffected.
 
+`apps/landing` hands visitors off to `apps/web` via a full-page, cross-origin navigation to `VITE_WEB_URL` (there is no shared browser storage between the two Cloudflare Pages deployments). Since LANDING-003, that navigation also carries the visitor's anonymous PostHog identity as a `landing_id` query parameter; `apps/web` reads it at bootstrap and merges it into the same PostHog person before its own user identification runs, so pre-registration events recorded by `apps/landing` and post-registration events recorded by `apps/web` resolve to one identity. This is the only state carried across the landing → web boundary; when the parameter is absent, `apps/web` falls back to its own locally generated anonymous identity with no error.
+
 ## Shared packages
 
 | Package | Name | Role |

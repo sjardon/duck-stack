@@ -53,4 +53,16 @@ export function captureEvent(name: string, properties?: Record<string, unknown>)
   posthog.capture(name, properties);
 }
 
+export function adoptPropagatedIdentity(): void {
+  const landingId = new URLSearchParams(window.location.search).get("landing_id");
+  if (!landingId) return;
+
+  try {
+    posthog.identify(landingId);
+  } catch (err) {
+    // An adoption failure must never block the app from rendering.
+    console.error("Analytics identity adoption failed", err);
+  }
+}
+
 export { posthog };
