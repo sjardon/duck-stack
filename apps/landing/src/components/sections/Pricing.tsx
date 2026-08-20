@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listPlans, type LandingPlan } from '../../api/plans';
+import { captureEvent } from '../../lib/analytics';
+import { buildHandoffUrl } from '../../lib/handoff';
+import { CONVERSION_EVENT_NAME, hasConverted, markConverted } from '../../lib/conversion';
 
 function formatPrice(price: number, currency: string): string {
   return price.toLocaleString('en-US', { style: 'currency', currency });
@@ -28,7 +31,11 @@ export default function Pricing(): JSX.Element {
   }, [load]);
 
   const handleCTA = (code: string): void => {
-    window.location.href = `${import.meta.env.VITE_WEB_URL}/billing/subscribe?plan=${code}`;
+    if (!hasConverted()) {
+      captureEvent(CONVERSION_EVENT_NAME, { action: 'pricing', plan: code });
+      markConverted();
+    }
+    window.location.href = buildHandoffUrl(`/billing/subscribe?plan=${code}`);
   };
 
   if (loading) {

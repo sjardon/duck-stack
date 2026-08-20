@@ -16,6 +16,7 @@ const posthogClient = { identify: vi.fn(), reset: vi.fn(), capture: vi.fn() };
 
 vi.mock('../../src/lib/analytics', () => ({
   initAnalytics: vi.fn(),
+  adoptPropagatedIdentity: vi.fn(),
   posthog: posthogClient,
 }));
 
@@ -99,5 +100,26 @@ describe('main.tsx — bootstrap initializes analytics and wraps the tree (R001,
     expect(providerElement).not.toBeNull();
     expect(providerElement?.props?.client).toBe(posthog);
     expect(findTypeNestedInside(renderedTree, PostHogProvider, AppModule.default)).toBe(true);
+  });
+});
+
+// T027 — R006, NF003
+
+describe('main.tsx — bootstrap adopts propagated identity after initAnalytics, before render (R006, NF003)', () => {
+  it('WHEN main.tsx is imported THEN adoptPropagatedIdentity runs after initAnalytics and before createRoot(...).render(...)', async () => {
+    await import('../../src/main');
+
+    const { initAnalytics, adoptPropagatedIdentity } = await import('../../src/lib/analytics');
+
+    const mockInitAnalytics = initAnalytics as ReturnType<typeof vi.fn>;
+    const mockAdoptPropagatedIdentity = adoptPropagatedIdentity as ReturnType<typeof vi.fn>;
+
+    expect(mockAdoptPropagatedIdentity).toHaveBeenCalledTimes(1);
+    expect(mockInitAnalytics.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAdoptPropagatedIdentity.mock.invocationCallOrder[0],
+    );
+    expect(mockAdoptPropagatedIdentity.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRender.mock.invocationCallOrder[0],
+    );
   });
 });

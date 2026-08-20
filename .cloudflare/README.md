@@ -88,6 +88,14 @@ When `SENTRY_AUTH_TOKEN` is set, `vite build` uploads `dist/**/*.map` to the err
 
 No deploy-time-only variable is needed for this feature — unlike error tracking's source-map upload, PostHog has no build-time secret.
 
+## Landing conversion analytics variables (LANDING-003 `landing`) and identity hand-off
+
+`landing`'s traffic/conversion analytics reuse the same PostHog project as `web` and are opt-in via the same two public `VITE_*` variables documented above for `web` — `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` — added to `landing`'s values file. Leaving `VITE_POSTHOG_KEY` unset disables visit recording, conversion recording, and identity propagation entirely: the landing still renders and its CTA/pricing hand-off navigation still work normally.
+
+Because `landing` and `web` are two separate deployments on different origins, browser storage is not shared between them. When a visitor activates a hand-off action ("Get early access" or a pricing plan CTA), `landing` appends its PostHog anonymous `distinct_id` to the hand-off URL as a `landing_id` query parameter (for example, `https://<web-url>/sign-up?landing_id=<id>`). `web` reads that parameter at bootstrap and calls `posthog.identify(landingId)` before its own existing user-identification call runs, so PostHog's anonymous-to-known merge chain resolves both the pre-registration and post-registration halves of the journey to a single person.
+
+If the `landing_id` parameter is absent from the navigation — because analytics was unconfigured on `landing`, a blocker prevented the client from initializing, or the visitor arrived at `web` through any other path — `web` silently continues with its own locally generated anonymous identity; no error is raised and no fallback configuration is required.
+
 ## Configuring the backend's `CORS_ORIGIN`
 
 Both SPAs call the backend deployed under INFRA-008, so the backend's

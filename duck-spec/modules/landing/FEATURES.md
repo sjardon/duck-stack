@@ -112,7 +112,7 @@ Que los errores de la landing lleguen reportados y con trazas que apunten al có
 
 ## LANDING-003 — Analítica de conversión en `landing`
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
