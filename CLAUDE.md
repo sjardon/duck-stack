@@ -38,6 +38,7 @@ Read these files when the task touches the relevant area — do not read them al
 | Backend (`apps/services`), Fastify, API routes, domain errors, logging | `duck-spec/docs/BACKEND.md` |
 | Frontend (`apps/web`, `apps/landing`), React, Vite, component conventions | `duck-spec/docs/FRONTEND.md` |
 | Current functional state of any module, what is implemented vs. planned | `duck-spec/docs/SPEC.md` |
+| Provisioning external providers, environment variables, deploying, rolling back, rotating credentials | `duck-spec/docs/RUNBOOK.md` |
 
 ## duck-spec workflow
 
