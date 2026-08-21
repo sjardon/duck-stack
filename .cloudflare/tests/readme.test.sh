@@ -14,9 +14,16 @@
 #   T028 (EC004, EC005) — .do/.env.deploy.example's CORS_ORIGIN comment mentions
 #     a comma-separated list of origins.
 #
+# INFRA012-T034 (R001, R002, R003) — the "Contents" table contains a row
+#   referencing .github/README.md.
+#
 # This is the "test" phase of INFRA-009: .cloudflare/README.md does not exist
 # yet and .do/.env.deploy.example has not been updated yet, so every assertion
 # below is expected to FAIL until the "implement" phase creates/updates them.
+# INFRA012-T034's assertion is the "test" phase of INFRA-012:
+# .cloudflare/README.md does not yet cross-reference .github/README.md, so
+# that assertion is expected to FAIL until INFRA-012's "implement" phase
+# adds it.
 #
 # Run: bash .cloudflare/tests/readme.test.sh
 
@@ -84,6 +91,18 @@ else
     pass "T026: $README_FILE has a 'Current deployments' table with App, Environment, Public URL and Last updated columns"
   else
     fail "T026: expected $README_FILE to have a 'Current deployments' table with App, Environment, Public URL and Last updated columns"
+  fi
+fi
+
+# --- INFRA012-T034 (R001, R002, R003) -----------------------------------------
+
+if [ ! -f "$README_FILE" ]; then
+  fail "INFRA012-T034: $README_FILE does not exist"
+else
+  if grep -qF '.github/README.md' "$README_FILE"; then
+    pass "INFRA012-T034: $README_FILE's 'Contents' table references .github/README.md"
+  else
+    fail "INFRA012-T034: expected $README_FILE to have a 'Contents' table row referencing .github/README.md"
   fi
 fi
 

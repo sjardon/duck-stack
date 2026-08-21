@@ -16,6 +16,7 @@ console.
 | `.do/.env.deploy.example` | Documents every placeholder consumed by `app.yaml`, with safe example values. |
 | `.do/.env.deploy.<environment>` | Per-environment real values. Git-ignored — never commit this file. |
 | `.do/monitoring/README.md` | Availability monitoring and log-forwarding runbook (INFRA-011) — Better Stack Uptime monitor + Logs source setup, one step past this deploy procedure. |
+| `.github/README.md` | CI/CD pipeline runbook (INFRA-012) — `dev`/`prod` now also deploy automatically on merge, calling this directory's `deploy.sh` unchanged; this document's manual procedure remains valid and equivalent for local/ad hoc use. |
 
 ## Prerequisites
 

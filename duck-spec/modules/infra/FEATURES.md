@@ -643,7 +643,7 @@ Detectar caídas del backend sin depender de que las reporte un usuario, y dejar
 
 ## INFRA-012 — CI/CD sobre DigitalOcean y Cloudflare
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 
