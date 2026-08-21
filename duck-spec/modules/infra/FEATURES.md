@@ -705,7 +705,7 @@ Automatizar el despliegue de los tres apps por rama, con despliegue manual de un
 
 ## INFRA-013 — Runbook de aprovisionamiento y despliegue
 
-**Estado:** TODO
+**Estado:** DONE
 
 ### Contexto
 

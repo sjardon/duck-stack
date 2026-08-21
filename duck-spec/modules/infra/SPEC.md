@@ -173,3 +173,17 @@ Running tests and linting inside the pipeline, per-pull-request preview environm
 ### Files
 
 `.github/workflows/deploy-apps.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `deploy-manual.yml`, `rollback.yml`; `.github/scripts/pin-do-deploy-ref.sh`, `write-values-file.sh`, `report-deploy-summary.sh`; `.github/README.md`; acceptance test suites under `.github/tests/` (`trigger-workflows.test.sh`, `deploy-apps-workflow.test.sh`, `pin-deploy-ref-script.test.sh`, `write-values-file-script.test.sh`, `report-deploy-summary-script.test.sh`, `readme.test.sh`). `apps/landing/vite.config.ts` gained the source-map-upload `errorHandler` override. `.do/README.md` and `.cloudflare/README.md` cross-reference `.github/README.md`.
+
+---
+
+## Provisioning & Deploy Runbook (INFRA-013)
+
+`duck-spec/docs/RUNBOOK.md` is the single living runbook consolidating the provisioning and operation of the full externally-provisioned stack (GitHub, DigitalOcean App Platform, Cloudflare Pages, Supabase, Clerk, Mobbex, Resend, Better Stack Logs/Uptime, Better Stack error tracking, PostHog). It has five sections in order: a maintenance rule requiring the runbook to be updated in the same change that adds, renames or removes an environment variable, provider, or deploy step, and stating the document holds no credentials or real environment-specific values; a provider catalogue (what each provider is used for, what to create in it, which credentials it issues); a complete environment-variable inventory grouped by consuming component with columns for consumer and value origin, verifiable against `.do/app.yaml`, the `.cloudflare/.env.deploy.*.example` files, and `.github/README.md`'s `vars.*`/`secrets.*` contract; an ordered from-scratch provisioning sequence (17 steps) marking each step `per-account` or `per-environment`, flagging blocking external waits (DNS propagation, alert-subscription confirmation), and stating cross-step dependencies explicitly; and the four recurring operations — deploy, deploy a specific commit, rollback, and credential rotation (per credential category, plus the three universal sub-steps: revoke/reissue, update every stored copy, redeploy the consumers) — together with an enumeration of the manual steps no automation covers, cross-referenced to their point in the provisioning sequence.
+
+### What is out of scope here
+
+Automating provider account/project/credential creation, a local development guide, application architecture (already covered by `ARCHITECTURE.md`/`BACKEND.md`/`FRONTEND.md`/`INFRASTRUCTURE.md`), incident diagnosis and on-call procedures, and reproducing each provider's own product documentation. The runbook references `.do/README.md`, `.do/monitoring/README.md`, `.cloudflare/README.md`, and `.github/README.md` for procedural detail instead of duplicating it.
+
+### Files
+
+`duck-spec/docs/RUNBOOK.md`, `duck-spec/docs/tests/runbook.test.sh`.
