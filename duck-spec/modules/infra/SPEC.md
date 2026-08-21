@@ -70,7 +70,7 @@ The versioned specification is the single source of truth: re-running the deploy
 
 ### What is out of scope here
 
-Automatic deploy on merge, manual deploy of an arbitrary commit, and rollback are not implemented (INFRA-012). Hosting for `web` and `landing` is unrelated to this deployment (INFRA-009).
+Hosting for `web` and `landing` is unrelated to this deployment (INFRA-009). Automatic deploy on merge, manual deploy of an arbitrary commit, and rollback are now covered by INFRA-012, which drives this same `.do/deploy.sh` entry point from GitHub Actions without modifying it.
 
 ### Files
 
@@ -100,11 +100,13 @@ Each app's `VITE_*` variables are exported into the shell before the build runs,
 
 ### What is out of scope here
 
-Automatic deployment on merge (INFRA-012), custom domains and certificates, and custom cache/WAF/geo rules are not covered. No source file of `apps/web` or `apps/landing` was changed.
+Custom domains and certificates, and custom cache/WAF/geo rules are not covered. No source file of `apps/web` or `apps/landing` was changed. Automatic deployment on merge is now covered by INFRA-012, which drives this same `.cloudflare/deploy.sh` entry point from GitHub Actions without modifying it.
 
 ### Files
 
 `.cloudflare/deploy.sh`, `.cloudflare/.env.deploy.web.example`, `.cloudflare/.env.deploy.landing.example`, `.cloudflare/README.md` (includes the "Current deployments" URL table), and acceptance test suites under `.cloudflare/tests/` (`deploy-script.test.sh`, `env-example.test.sh`, `gitignore.test.sh`, `readme.test.sh`). `.gitignore` excludes `.cloudflare/.env.deploy.*` while keeping both `*.example` files tracked. `package.json` (root) declares `wrangler` as a pinned devDependency.
+
+---
 
 ## Availability Monitoring & Log Aggregation — Better Stack (INFRA-011)
 
@@ -133,3 +135,41 @@ Backend exception reporting and grouping (SERVICES-011), a public status page, o
 ### Files
 
 `.do/app.yaml` (extended with `log_destinations`), `.do/.env.deploy.example` (extended with the monitoring/log-forwarding section), `.do/monitoring/monitor.json`, `.do/monitoring/deploy.sh`, `.do/monitoring/README.md`, and acceptance test suites under `.do/monitoring/tests/` (`monitor-spec.test.sh`, `deploy-script.test.sh`, `readme.test.sh`). `.do/tests/app-spec.test.sh` and `.do/tests/env-example.test.sh` were extended to cover the new values. `.do/README.md` cross-references `.do/monitoring/README.md`.
+
+---
+
+## CI/CD Automation — GitHub Actions over DigitalOcean and Cloudflare (INFRA-012)
+
+The three apps (`services`, `web`, `landing`) deploy automatically: a merge to `develop` delivers the merged commit to the `dev` environment, and a merge to `main` delivers it to `prod`, with no manual step. Every deploy — automatic or manual — funnels through one reusable GitHub Actions workflow (`.github/workflows/deploy-apps.yml`) that invokes the unchanged `.do/deploy.sh` and `.cloudflare/deploy.sh` entry points from INFRA-008/INFRA-009; no deploy mechanics were rewritten.
+
+### Manual deploy and rollback
+
+`workflow_dispatch` triggers cover two operator-initiated flows, both taking `environment` and `commit_sha` as inputs and both calling the same reusable workflow the automatic flows call: `deploy-manual.yml` delivers an arbitrary commit to a chosen environment, and `rollback.yml` redeploys a previously delivered commit, printing an explicit warning that only application code is reverted and that already-applied data changes are not — the operator must verify compatibility with the current database state before treating the rollback as complete.
+
+### Pinning the backend deploy to an exact commit
+
+DigitalOcean App Platform's `github` source only accepts a branch name, never a commit SHA, so every deploy — automatic or manual — force-updates a per-environment ref (`_deploy/dev`, `_deploy/prod`) to the exact commit being delivered immediately before invoking `.do/deploy.sh`, and points `.do/app.yaml`'s `${GIT_BRANCH}` placeholder at that ref. This makes the delivered backend commit exact regardless of what lands on `develop`/`main` afterward, and keeps `.do/app.yaml`'s structure, `envsubst` + `doctl --upsert` reconcile, and `${PORT}`-shared health-check wiring untouched.
+
+### Per-environment configuration source
+
+Two GitHub Environments, `dev` and `prod`, are the single per-environment source that feeds all three app deploys — every value the three deploy scripts need is either a non-secret Environment variable or an Environment secret, mirroring the `type: general`/`type: secret` split `.do/app.yaml` already encodes. The same workflow definition serves both environments with no `if environment == …` branching; the job's `environment:` input alone scopes which values resolve. No credential is ever committed: everything is read at run time from GitHub's encrypted per-environment secret storage.
+
+### Release identifier and source-map alignment
+
+The backend's `SERVICE_VERSION` and both SPAs' `VITE_RELEASE` are always set to the exact commit SHA being deployed, never a stored value, so the release a running app reports and the release its trace-resolution artifacts (source maps) are uploaded under are structurally identical. `apps/landing/vite.config.ts` now rethrows a failed source-map upload (matching `apps/web/vite.config.ts`), so a failed upload aborts the landing build and the deploy, instead of being silently swallowed.
+
+### Run output and partial-failure visibility
+
+Every deploy run prints, for each of the three apps, the target environment, the exact commit SHA delivered, and the resulting public URL. The three app deploys run as sequential `continue-on-error` steps in one job, followed by an unconditional reporting step: the run only concludes once all three have reached a terminal state, and it fails whenever any app did not publish — so a partial delivery (frontend and backend on different versions) is never reported as a success, and the run output alone shows which apps published and at which commit.
+
+### Concurrency
+
+All four trigger workflows (`deploy-dev.yml`, `deploy-prod.yml`, `deploy-manual.yml`, `rollback.yml`) share one `concurrency` group per environment with `cancel-in-progress: false`: a deploy run targeting an environment that starts while another one targeting the same environment is still in progress is queued, not cancelled, and runs to completion afterward serving the commit of the run queued last.
+
+### What is out of scope here
+
+Running tests and linting inside the pipeline, per-pull-request preview environments, deploy notifications to external channels, provisioning the provider accounts and projects, and database migrations as part of the deploy.
+
+### Files
+
+`.github/workflows/deploy-apps.yml`, `deploy-dev.yml`, `deploy-prod.yml`, `deploy-manual.yml`, `rollback.yml`; `.github/scripts/pin-do-deploy-ref.sh`, `write-values-file.sh`, `report-deploy-summary.sh`; `.github/README.md`; acceptance test suites under `.github/tests/` (`trigger-workflows.test.sh`, `deploy-apps-workflow.test.sh`, `pin-deploy-ref-script.test.sh`, `write-values-file-script.test.sh`, `report-deploy-summary-script.test.sh`, `readme.test.sh`). `apps/landing/vite.config.ts` gained the source-map-upload `errorHandler` override. `.do/README.md` and `.cloudflare/README.md` cross-reference `.github/README.md`.

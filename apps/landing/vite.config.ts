@@ -14,6 +14,15 @@ function resolveSentryVitePluginOptions() {
     sourcemaps: {
       filesToDeleteAfterUpload: ["**/*.map"],
     },
+    // The plugin's internal default (no errorHandler override) logs and
+    // swallows source-map upload failures instead of throwing, so `vite
+    // build` would exit 0 and the deploy would ship without maps. Rethrowing
+    // here forces `vite build` to fail, which — under `deploy.sh`'s
+    // `set -euo pipefail` — aborts the deploy before `wrangler pages deploy`
+    // runs.
+    errorHandler: (error: Error) => {
+      throw error;
+    },
   };
 }
 

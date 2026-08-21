@@ -1,0 +1,144 @@
+name: Deploy apps
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      commit_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Print deploy target
+        run: echo "environment=${{ inputs.environment }} commit=${{ inputs.commit_sha }}"
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Deploy services
+        id: deploy_services
+        continue-on-error: true
+        env:
+          # --- vars.* (general, non-secret) ---
+          DO_APP_NAME: ${{ vars.DO_APP_NAME }}
+          NODE_ENV: ${{ vars.NODE_ENV }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+          HOST: ${{ vars.HOST }}
+          PORT: ${{ vars.PORT }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          EMAIL_SENDER_ADDRESS: ${{ vars.EMAIL_SENDER_ADDRESS }}
+          BILLING_PROVIDER: ${{ vars.BILLING_PROVIDER }}
+          MOBBEX_TEST_MODE: ${{ vars.MOBBEX_TEST_MODE }}
+          MOBBEX_TIMEOUT_MS: ${{ vars.MOBBEX_TIMEOUT_MS }}
+          ERROR_TRACKING_SAMPLE_RATE: ${{ vars.ERROR_TRACKING_SAMPLE_RATE }}
+          SIGNUP_MODE: ${{ vars.SIGNUP_MODE }}
+          FREE_TRIAL_DAYS: ${{ vars.FREE_TRIAL_DAYS }}
+          STRICT_ENTITLEMENTS_ON_PAST_DUE: ${{ vars.STRICT_ENTITLEMENTS_ON_PAST_DUE }}
+
+          # --- secrets.* ---
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_JWT_KEY: ${{ secrets.CLERK_JWT_KEY }}
+          CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MOBBEX_API_KEY: ${{ secrets.MOBBEX_API_KEY }}
+          MOBBEX_ACCESS_TOKEN: ${{ secrets.MOBBEX_ACCESS_TOKEN }}
+          MOBBEX_WEBHOOK_SECRET: ${{ secrets.MOBBEX_WEBHOOK_SECRET }}
+          ERROR_TRACKING_DSN: ${{ secrets.ERROR_TRACKING_DSN }}
+          BETTERSTACK_LOGS_TOKEN: ${{ secrets.BETTERSTACK_LOGS_TOKEN }}
+
+          # --- computed at run time, not a stored vars.*/secrets.* value ---
+          GITHUB_REPO: ${{ github.repository }}
+          SERVICE_VERSION: ${{ inputs.commit_sha }}
+        run: |
+          GIT_BRANCH="$(.github/scripts/pin-do-deploy-ref.sh "${{ inputs.environment }}" "${{ inputs.commit_sha }}")"
+          export GIT_BRANCH
+          .github/scripts/write-values-file.sh services /tmp/do-values.env
+          .do/deploy.sh /tmp/do-values.env | tee /tmp/do-output.log
+
+      - name: Deploy web
+        id: deploy_web
+        continue-on-error: true
+        env:
+          # --- vars.* (general, non-secret) ---
+          GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_LANDING_URL: ${{ vars.VITE_LANDING_URL }}
+          VITE_PROVIDER_PORTAL_URL: ${{ vars.VITE_PROVIDER_PORTAL_URL }}
+          VITE_ERROR_TRACKING_DSN: ${{ vars.VITE_ERROR_TRACKING_DSN }}
+          VITE_ENVIRONMENT: ${{ vars.VITE_ENVIRONMENT }}
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ vars.SENTRY_URL }}
+
+          # --- secrets.* ---
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+          # --- computed at run time, not a stored vars.*/secrets.* value ---
+          VITE_RELEASE: ${{ inputs.commit_sha }}
+        run: |
+          .github/scripts/write-values-file.sh web /tmp/web-values.env
+          .cloudflare/deploy.sh web /tmp/web-values.env | tee /tmp/web-output.log
+
+      - name: Deploy landing
+        id: deploy_landing
+        continue-on-error: true
+        env:
+          # --- vars.* (general, non-secret) ---
+          GIT_BRANCH: ${{ vars.GIT_BRANCH }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_WEB_URL: ${{ vars.VITE_WEB_URL }}
+          VITE_ERROR_TRACKING_DSN: ${{ vars.VITE_ERROR_TRACKING_DSN }}
+          VITE_ENVIRONMENT: ${{ vars.VITE_ENVIRONMENT }}
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ vars.SENTRY_URL }}
+
+          # --- secrets.* ---
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+          # --- computed at run time, not a stored vars.*/secrets.* value ---
+          VITE_RELEASE: ${{ inputs.commit_sha }}
+        run: |
+          .github/scripts/write-values-file.sh landing /tmp/landing-values.env
+          .cloudflare/deploy.sh landing /tmp/landing-values.env | tee /tmp/landing-output.log
+
+      - name: Report deploy summary
+        if: always()
+        run: |
+          .github/scripts/report-deploy-summary.sh "${{ inputs.environment }}" "${{ inputs.commit_sha }}" \
+            "${{ steps.deploy_services.outcome }}" /tmp/do-output.log \
+            "${{ steps.deploy_web.outcome }}" /tmp/web-output.log \
+            "${{ steps.deploy_landing.outcome }}" /tmp/landing-output.log

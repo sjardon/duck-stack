@@ -38,7 +38,7 @@ afterEach(() => {
 // T021 — R003, NF001, EC001, EC005
 
 describe('vite.config — sourcemaps and plugin gated on SENTRY_AUTH_TOKEN (R003, NF001, EC001, EC005)', () => {
-  it('WHEN SENTRY_AUTH_TOKEN is set THEN build.sourcemap is true and a sentry-vite-plugin entry is included with filesToDeleteAfterUpload, no errorHandler override, and deploy-only credentials sourced from process.env keys that are never VITE_-prefixed', async () => {
+  it('WHEN SENTRY_AUTH_TOKEN is set THEN build.sourcemap is true and a sentry-vite-plugin entry is included with filesToDeleteAfterUpload, an errorHandler that rethrows, and deploy-only credentials sourced from process.env keys that are never VITE_-prefixed', async () => {
     process.env.SENTRY_AUTH_TOKEN = 'token-123';
     process.env.SENTRY_ORG = 'my-org';
     process.env.SENTRY_PROJECT = 'my-project';
@@ -55,7 +55,7 @@ describe('vite.config — sourcemaps and plugin gated on SENTRY_AUTH_TOKEN (R003
 
     const options = mockSentryVitePlugin.mock.calls[0][0];
     expect(options.sourcemaps.filesToDeleteAfterUpload).toEqual(['**/*.map']);
-    expect(options.errorHandler).toBeUndefined();
+    expect(typeof options.errorHandler).toBe('function');
 
     expect(options.authToken).toBe('token-123');
     expect(options.org).toBe('my-org');
@@ -88,6 +88,28 @@ describe('vite.config — sourcemaps and plugin gated on SENTRY_AUTH_TOKEN (R003
     expect(pluginEntries.some((plugin) => plugin?.name === 'mock-sentry-vite-plugin')).toBe(
       false,
     );
+  });
+});
+
+// T011 (INFRA-012) — R005, EC002
+
+describe('vite.config — a failed source-map upload rethrows instead of being swallowed (R005, EC002)', () => {
+  it('WHEN the source-map upload fails THEN the errorHandler rethrows the error, so vite build fails', async () => {
+    process.env.SENTRY_AUTH_TOKEN = 'token-123';
+    process.env.SENTRY_ORG = 'my-org';
+    process.env.SENTRY_PROJECT = 'my-project';
+    process.env.VITE_RELEASE = 'v1.0.0';
+
+    const { sentryVitePlugin } = await import('@sentry/vite-plugin');
+    const mockSentryVitePlugin = sentryVitePlugin as ReturnType<typeof vi.fn>;
+
+    await import('../../vite.config');
+
+    const options = mockSentryVitePlugin.mock.calls[0][0];
+    const uploadError = new Error('upload failed');
+
+    expect(typeof options.errorHandler).toBe('function');
+    expect(() => options.errorHandler(uploadError)).toThrow(uploadError);
   });
 });
 

@@ -10,8 +10,15 @@
 #   - a "Current deployments" table with Environment, Public URL and Last updated
 #     columns (R011)
 #
+# INFRA012-T032 (R001, R002, R003) — the "Contents" table contains a row
+#   referencing .github/README.md, and the file states that automatic deploys
+#   now exist on merge alongside the still-valid manual procedure.
+#
 # This is the "test" phase of INFRA-008: .do/README.md does not exist yet, so every
 # assertion below is expected to FAIL until the "implement" phase creates it.
+# INFRA012-T032's assertions are the "test" phase of INFRA-012: .do/README.md
+# does not yet cross-reference .github/README.md, so that assertion is
+# expected to FAIL until INFRA-012's "implement" phase adds it.
 #
 # Run: bash .do/tests/readme.test.sh
 
@@ -67,6 +74,20 @@ if grep -qiE 'current deployments' "$README_FILE" \
   pass "T029: $README_FILE has a 'Current deployments' table with Environment, Public URL and Last updated columns"
 else
   fail "T029: expected $README_FILE to have a 'Current deployments' table with Environment, Public URL and Last updated columns"
+fi
+
+# --- INFRA012-T032 (R001, R002, R003) -----------------------------------------
+
+if grep -qF '.github/README.md' "$README_FILE"; then
+  pass "INFRA012-T032: $README_FILE's 'Contents' table references .github/README.md"
+else
+  fail "INFRA012-T032: expected $README_FILE to have a 'Contents' table row referencing .github/README.md"
+fi
+
+if grep -qiE 'automatic' "$README_FILE" && grep -qiE 'merge' "$README_FILE" && grep -qiE 'manual' "$README_FILE"; then
+  pass "INFRA012-T032: $README_FILE states that automatic deploys now exist on merge alongside the still-valid manual procedure"
+else
+  fail "INFRA012-T032: expected $README_FILE to state that automatic deploys now exist on merge alongside the still-valid manual procedure"
 fi
 
 exit "$FAILED"

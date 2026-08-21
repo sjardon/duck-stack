@@ -1,0 +1,32 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment to roll back."
+        type: choice
+        options: [dev, prod]
+        required: true
+      commit_sha:
+        description: "Full SHA of the previously delivered commit to redeploy."
+        type: string
+        required: true
+
+jobs:
+  warn:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warn about irreversible data changes
+        run: |
+          echo "::warning::Rolling back services to ${{ inputs.commit_sha }} only reverts application code. Already-applied data changes are NOT reverted. Verify this version's compatibility with the current database state before confirming the rollback as complete."
+
+  deploy:
+    needs: warn
+    uses: ./.github/workflows/deploy-apps.yml
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    with:
+      environment: ${{ inputs.environment }}
+      commit_sha: ${{ inputs.commit_sha }}

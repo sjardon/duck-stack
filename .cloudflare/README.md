@@ -2,9 +2,10 @@
 
 This directory holds the deploy script and per-app values-file templates
 used to build and publish the `apps/web` and `apps/landing` SPAs to
-Cloudflare Pages. Deployment is always an explicit, local/CI invocation of
-`.cloudflare/deploy.sh` — never triggered by a git push or a Cloudflare-side
-build hook (automatic deploy-on-merge is out of scope, INFRA-012).
+Cloudflare Pages. Deployment is always an explicit invocation of
+`.cloudflare/deploy.sh` — either run locally, or run by the CI/CD pipeline
+documented in `.github/README.md` on merge to `develop`/`main` (INFRA-012)
+— never triggered by a Cloudflare-side build hook.
 
 ## Contents
 
@@ -14,6 +15,7 @@ build hook (automatic deploy-on-merge is out of scope, INFRA-012).
 | `.cloudflare/.env.deploy.web.example` | Documents every placeholder `deploy.sh web` needs, with safe example values. |
 | `.cloudflare/.env.deploy.landing.example` | Documents every placeholder `deploy.sh landing` needs, with safe example values. |
 | `.cloudflare/.env.deploy.<app>.<environment>` | Per-environment real values. Git-ignored — never commit this file. |
+| `.github/README.md` | CI/CD pipeline runbook (INFRA-012) — `dev`/`prod` now also deploy automatically on merge, calling this directory's `deploy.sh` unchanged. |
 
 ## Prerequisites
 
